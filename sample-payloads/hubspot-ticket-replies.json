@@ -1,0 +1,985 @@
+{
+  "_comment": "Synthetic fixture. Ticket, thread and message shapes follow the HubSpot CRM tickets API and the Conversations v3 threads/messages API. All people, companies, emails (@example.com / @company.example) and IDs are fictitious; the phone number uses the fictional 555-01xx range. _relative values are resolved against the current time by the sandbox node. Expected results: README \u00a75.",
+  "tickets": [
+    {
+      "ticket": {
+        "id": "8001201",
+        "properties": {
+          "subject": "Data sync failing",
+          "hs_ticket_priority": "MEDIUM",
+          "hs_pipeline": "0",
+          "hs_pipeline_stage": "2",
+          "frustration_score": null,
+          "frustration_last_alert_at": null,
+          "frustration_last_alert_tier": null
+        }
+      },
+      "company": {
+        "id": "7001201",
+        "properties": {
+          "name": "Acme Cloud Solutions",
+          "customer_tier": "Enterprise"
+        }
+      },
+      "contact": {
+        "id": "9001201",
+        "properties": {
+          "firstname": "Alex",
+          "lastname": "Rivera",
+          "email": "alex.rivera@example.com"
+        }
+      },
+      "thread": {
+        "id": "4001201",
+        "threadAssociations": {
+          "associatedTicketId": "8001201"
+        },
+        "messages": [
+          {
+            "id": "m1201a",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T08:00:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "Hi, our nightly data sync failed again. Can you take a look?",
+            "senders": [
+              {
+                "actorId": "V-alexrivera",
+                "name": "Alex Rivera",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "alex.rivera@example.com"
+                }
+              }
+            ],
+            "archived": false
+          },
+          {
+            "id": "m1201b",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T08:30:00.000Z",
+            "direction": "OUTGOING",
+            "channelId": "1002",
+            "text": "Thanks Alex, we are investigating and will update you shortly.",
+            "senders": [
+              {
+                "actorId": "A-agentone",
+                "name": "Support Agent",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "agent.one@company.example"
+                }
+              }
+            ],
+            "archived": false
+          },
+          {
+            "id": "m1201c",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T10:05:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "This is UNACCEPTABLE. This is the third time the sync is broken again this month. If this isn't fixed today we will cancel, and our lawyer is already reviewing the contract!!! Call me on +1-202-555-0148.",
+            "senders": [
+              {
+                "actorId": "V-alexrivera",
+                "name": "Alex Rivera",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "alex.rivera@example.com"
+                }
+              }
+            ],
+            "archived": false
+          }
+        ]
+      }
+    },
+    {
+      "ticket": {
+        "id": "8001202",
+        "properties": {
+          "subject": "Export button not working",
+          "hs_ticket_priority": "LOW",
+          "hs_pipeline": "0",
+          "hs_pipeline_stage": "2",
+          "frustration_score": null,
+          "frustration_last_alert_at": null,
+          "frustration_last_alert_tier": null
+        }
+      },
+      "company": {
+        "id": "7001202",
+        "properties": {
+          "name": "Northstar Logistics",
+          "customer_tier": "Growth"
+        }
+      },
+      "contact": {
+        "id": "9001202",
+        "properties": {
+          "firstname": "Jordan",
+          "lastname": "Taylor",
+          "email": "jordan.taylor@example.com"
+        }
+      },
+      "thread": {
+        "id": "4001202",
+        "threadAssociations": {
+          "associatedTicketId": "8001202"
+        },
+        "messages": [
+          {
+            "id": "m1202a",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T06:00:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "The CSV export button does nothing when I click it.",
+            "senders": [
+              {
+                "actorId": "V-jordantaylor",
+                "name": "Jordan Taylor",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "jordan.taylor@example.com"
+                }
+              }
+            ],
+            "archived": false
+          },
+          {
+            "id": "m1202b",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T06:20:00.000Z",
+            "direction": "OUTGOING",
+            "channelId": "1002",
+            "text": "Thanks Jordan, logging this with engineering.",
+            "senders": [
+              {
+                "actorId": "A-agentone",
+                "name": "Support Agent",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "agent.one@company.example"
+                }
+              }
+            ],
+            "archived": false
+          },
+          {
+            "id": "m1202c",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T08:00:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "Any update on this?",
+            "senders": [
+              {
+                "actorId": "V-jordantaylor",
+                "name": "Jordan Taylor",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "jordan.taylor@example.com"
+                }
+              }
+            ],
+            "archived": false
+          },
+          {
+            "id": "m1202d",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T09:00:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "Still waiting on this, the team needs the export for month-end.",
+            "senders": [
+              {
+                "actorId": "V-jordantaylor",
+                "name": "Jordan Taylor",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "jordan.taylor@example.com"
+                }
+              }
+            ],
+            "archived": false
+          },
+          {
+            "id": "m1202e",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T10:10:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "Still waiting. Nobody has responded in two days and I keep asking. Please escalate this to a manager.",
+            "senders": [
+              {
+                "actorId": "V-jordantaylor",
+                "name": "Jordan Taylor",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "jordan.taylor@example.com"
+                }
+              }
+            ],
+            "archived": false
+          }
+        ]
+      }
+    },
+    {
+      "ticket": {
+        "id": "8001203",
+        "properties": {
+          "subject": "API pagination question",
+          "hs_ticket_priority": "LOW",
+          "hs_pipeline": "0",
+          "hs_pipeline_stage": "1",
+          "frustration_score": null,
+          "frustration_last_alert_at": null,
+          "frustration_last_alert_tier": null
+        }
+      },
+      "company": {
+        "id": "7001203",
+        "properties": {
+          "name": "Bavaria Precision Engineering",
+          "customer_tier": "Mid-Market"
+        }
+      },
+      "contact": {
+        "id": "9001203",
+        "properties": {
+          "firstname": "Lena",
+          "lastname": "Vogel",
+          "email": "lena.vogel@example.com"
+        }
+      },
+      "thread": {
+        "id": "4001203",
+        "threadAssociations": {
+          "associatedTicketId": "8001203"
+        },
+        "messages": [
+          {
+            "id": "m1203a",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T10:00:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "Quick question: what is the maximum page size for the orders endpoint, and is the cursor stable across deploys?",
+            "senders": [
+              {
+                "actorId": "V-lenavogel",
+                "name": "Lena Vogel",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "lena.vogel@example.com"
+                }
+              }
+            ],
+            "archived": false
+          }
+        ]
+      }
+    },
+    {
+      "ticket": {
+        "id": "8001204",
+        "properties": {
+          "subject": "Billing address change",
+          "hs_ticket_priority": "LOW",
+          "hs_pipeline": "0",
+          "hs_pipeline_stage": "1",
+          "frustration_score": null,
+          "frustration_last_alert_at": null,
+          "frustration_last_alert_tier": null
+        }
+      },
+      "company": {
+        "id": "7001204",
+        "properties": {
+          "name": "Harbor Freightways",
+          "customer_tier": "Growth"
+        }
+      },
+      "contact": {
+        "id": "9001204",
+        "properties": {
+          "firstname": "Sam",
+          "lastname": "Patel",
+          "email": "sam.patel@example.com"
+        }
+      },
+      "thread": {
+        "id": "4001204",
+        "threadAssociations": {
+          "associatedTicketId": "8001204"
+        },
+        "messages": [
+          {
+            "id": "m1204a",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T09:00:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "Could you update the billing address on our account? The new one is attached.",
+            "senders": [
+              {
+                "actorId": "V-sampatel",
+                "name": "Sam Patel",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "sam.patel@example.com"
+                }
+              }
+            ],
+            "archived": false
+          },
+          {
+            "id": "m1204b",
+            "type": "COMMENT",
+            "createdAt": "2026-11-16T10:20:00.000Z",
+            "direction": "OUTGOING",
+            "channelId": "1002",
+            "text": "Internal: customer sounded furious on the phone, might cancel. Escalate to manager if this slips.",
+            "senders": [
+              {
+                "actorId": "A-agentone",
+                "name": "Support Agent",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "agent.one@company.example"
+                }
+              }
+            ],
+            "archived": false
+          }
+        ]
+      }
+    },
+    {
+      "ticket": {
+        "id": "8001205",
+        "properties": {
+          "subject": "Onboarding call follow-up",
+          "hs_ticket_priority": "LOW",
+          "hs_pipeline": "0",
+          "hs_pipeline_stage": "2",
+          "frustration_score": null,
+          "frustration_last_alert_at": null,
+          "frustration_last_alert_tier": null
+        }
+      },
+      "company": {
+        "id": "7001205",
+        "properties": {
+          "name": "Lumiere Optique",
+          "customer_tier": "Enterprise"
+        }
+      },
+      "contact": {
+        "id": "9001205",
+        "properties": {
+          "firstname": "Camille",
+          "lastname": "Durand",
+          "email": "camille.durand@example.com"
+        }
+      },
+      "thread": {
+        "id": "4001205",
+        "threadAssociations": {
+          "associatedTicketId": "8001205"
+        },
+        "messages": [
+          {
+            "id": "m1205a",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T09:00:00.000Z",
+            "direction": "OUTGOING",
+            "channelId": "1002",
+            "text": "Hi Camille, sharing the recording from today's onboarding call.",
+            "senders": [
+              {
+                "actorId": "A-agentone",
+                "name": "Support Agent",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "agent.one@company.example"
+                }
+              }
+            ],
+            "archived": false
+          },
+          {
+            "id": "m1205b",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T09:01:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "Automatic reply: I am out of the office until Monday with limited access to email. For anything urgent or if this is unacceptable to wait, please contact our team lead.",
+            "senders": [
+              {
+                "actorId": "V-camilleduran",
+                "name": "Camille Durand",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "camille.durand@example.com"
+                }
+              }
+            ],
+            "archived": false,
+            "subject": "Automatic reply: Onboarding call follow-up"
+          }
+        ]
+      }
+    },
+    {
+      "ticket": {
+        "id": "8001206",
+        "properties": {
+          "subject": "SSO login loop",
+          "hs_ticket_priority": "HIGH",
+          "hs_pipeline": "0",
+          "hs_pipeline_stage": "3",
+          "frustration_score": "48",
+          "frustration_last_alert_at": null,
+          "frustration_last_alert_tier": null
+        }
+      },
+      "company": {
+        "id": "7001206",
+        "properties": {
+          "name": "Kiwi Orchard",
+          "customer_tier": "Enterprise"
+        }
+      },
+      "contact": {
+        "id": "9001206",
+        "properties": {
+          "firstname": "Riley",
+          "lastname": "Ford",
+          "email": "riley.ford@example.com"
+        }
+      },
+      "thread": {
+        "id": "4001206",
+        "threadAssociations": {
+          "associatedTicketId": "8001206"
+        },
+        "messages": [
+          {
+            "id": "m1206a",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T07:00:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "Our users are stuck in an SSO login loop, this is urgent and frustrating.",
+            "senders": [
+              {
+                "actorId": "V-rileyford",
+                "name": "Riley Ford",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "riley.ford@example.com"
+                }
+              }
+            ],
+            "archived": false
+          },
+          {
+            "id": "m1206b",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T09:30:00.000Z",
+            "direction": "OUTGOING",
+            "channelId": "1002",
+            "text": "We've deployed a fix. Can you confirm it works now?",
+            "senders": [
+              {
+                "actorId": "A-agentone",
+                "name": "Support Agent",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "agent.one@company.example"
+                }
+              }
+            ],
+            "archived": false
+          },
+          {
+            "id": "m1206c",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T10:15:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "Thanks so much, that fixed it! Really appreciate the quick help from the team.",
+            "senders": [
+              {
+                "actorId": "V-rileyford",
+                "name": "Riley Ford",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "riley.ford@example.com"
+                }
+              }
+            ],
+            "archived": false
+          }
+        ]
+      }
+    },
+    {
+      "ticket": {
+        "id": "8001207",
+        "properties": {
+          "subject": "Missing invoices",
+          "hs_ticket_priority": "MEDIUM",
+          "hs_pipeline": "0",
+          "hs_pipeline_stage": "2",
+          "frustration_score": null,
+          "frustration_last_alert_at": null,
+          "frustration_last_alert_tier": null
+        }
+      },
+      "company": {
+        "id": "7001207",
+        "properties": {
+          "name": "Rotterdam Freight",
+          "customer_tier": "Mid-Market"
+        }
+      },
+      "contact": {
+        "id": "9001207",
+        "properties": {
+          "firstname": "Noor",
+          "lastname": "Haddad",
+          "email": "noor.haddad@example.com"
+        }
+      },
+      "thread": {
+        "id": "4001207",
+        "threadAssociations": {
+          "associatedTicketId": "8001207"
+        },
+        "messages": [
+          {
+            "id": "m1207a",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T10:30:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "We still have not received last month's invoices. We are seriously considering switching to another vendor and expect a refund for this month.",
+            "senders": [
+              {
+                "actorId": "V-noorhaddad",
+                "name": "Noor Haddad",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "noor.haddad@example.com"
+                }
+              }
+            ],
+            "archived": false
+          }
+        ]
+      }
+    },
+    {
+      "ticket": {
+        "id": "8001208",
+        "properties": {
+          "subject": "Report scheduling broken",
+          "hs_ticket_priority": "HIGH",
+          "hs_pipeline": "0",
+          "hs_pipeline_stage": "2",
+          "frustration_score": "72",
+          "frustration_last_alert_at": null,
+          "frustration_last_alert_tier": "high"
+        }
+      },
+      "company": {
+        "id": "7001208",
+        "properties": {
+          "name": "Andes Mining",
+          "customer_tier": "Enterprise"
+        }
+      },
+      "contact": {
+        "id": "9001208",
+        "properties": {
+          "firstname": "Morgan",
+          "lastname": "Quinn",
+          "email": "morgan.quinn@example.com"
+        }
+      },
+      "thread": {
+        "id": "4001208",
+        "threadAssociations": {
+          "associatedTicketId": "8001208"
+        },
+        "messages": [
+          {
+            "id": "m1208a",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T10:40:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "Scheduled reports are broken again. This is unacceptable and I want this escalated to your manager today.",
+            "senders": [
+              {
+                "actorId": "V-morganquinn",
+                "name": "Morgan Quinn",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "morgan.quinn@example.com"
+                }
+              }
+            ],
+            "archived": false
+          }
+        ]
+      },
+      "_relative": {
+        "lastAlertHoursAgo": 2
+      }
+    },
+    {
+      "ticket": {
+        "id": "8001209",
+        "properties": {
+          "subject": "Typo in invoice template",
+          "hs_ticket_priority": "LOW",
+          "hs_pipeline": "0",
+          "hs_pipeline_stage": "1",
+          "frustration_score": null,
+          "frustration_last_alert_at": null,
+          "frustration_last_alert_tier": null
+        }
+      },
+      "company": {
+        "id": "7001209",
+        "properties": {
+          "name": "Milano Tessile",
+          "customer_tier": "Growth"
+        }
+      },
+      "contact": {
+        "id": "9001209",
+        "properties": {
+          "firstname": "Casey",
+          "lastname": "Brooks",
+          "email": "casey.brooks@example.com"
+        }
+      },
+      "thread": {
+        "id": "4001209",
+        "threadAssociations": {
+          "associatedTicketId": "8001209"
+        },
+        "messages": [
+          {
+            "id": "m1209a",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T10:45:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "No need to escalate, and we're not going to cancel anything. Just flagging a small typo in the invoice footer.",
+            "senders": [
+              {
+                "actorId": "V-caseybrooks",
+                "name": "Casey Brooks",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "casey.brooks@example.com"
+                }
+              }
+            ],
+            "archived": false
+          }
+        ]
+      }
+    },
+    {
+      "ticket": {
+        "id": "8001210",
+        "properties": {
+          "subject": "Renewal paperwork",
+          "hs_ticket_priority": "LOW",
+          "hs_pipeline": "0",
+          "hs_pipeline_stage": "1",
+          "frustration_score": null,
+          "frustration_last_alert_at": null,
+          "frustration_last_alert_tier": null
+        }
+      },
+      "company": {
+        "id": "7001210",
+        "properties": {
+          "name": "Summit Legal Partners",
+          "customer_tier": "Growth"
+        }
+      },
+      "contact": {
+        "id": "9001210",
+        "properties": {
+          "firstname": "Taylor",
+          "lastname": "Morgan",
+          "email": "taylor.morgan@example.com"
+        }
+      },
+      "thread": {
+        "id": "4001210",
+        "threadAssociations": {
+          "associatedTicketId": "8001210"
+        },
+        "messages": [
+          {
+            "id": "m1210a",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T10:00:00.000Z",
+            "direction": "OUTGOING",
+            "channelId": "1002",
+            "text": "Hi Taylor, attaching the renewal paperwork.",
+            "senders": [
+              {
+                "actorId": "A-agentone",
+                "name": "Support Agent",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "agent.one@company.example"
+                }
+              }
+            ],
+            "archived": false
+          },
+          {
+            "id": "m1210b",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T10:01:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "Delivery Status Notification (Failure). Your message could not be delivered to taylor.morgan@example.com. The recipient's mailbox is full. Mail delivery failed permanently.",
+            "senders": [
+              {
+                "actorId": "V-mailer-daemo",
+                "name": "Mail Delivery Subsystem",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "mailer-daemon@example.com"
+                }
+              }
+            ],
+            "archived": false,
+            "subject": "Undeliverable: Renewal paperwork"
+          }
+        ]
+      }
+    },
+    {
+      "ticket": {
+        "id": "8001211",
+        "properties": {
+          "subject": "Dashboard outage",
+          "hs_ticket_priority": "MEDIUM",
+          "hs_pipeline": "0",
+          "hs_pipeline_stage": "2",
+          "frustration_score": null,
+          "frustration_last_alert_at": null,
+          "frustration_last_alert_tier": null
+        }
+      },
+      "company": {
+        "id": "7001211",
+        "properties": {
+          "name": "Pinecrest Dental",
+          "customer_tier": "SMB"
+        }
+      },
+      "contact": {
+        "id": "9001211",
+        "properties": {
+          "firstname": "Jamie",
+          "lastname": "Chen",
+          "email": "jamie.chen@example.com"
+        }
+      },
+      "thread": {
+        "id": "4001211",
+        "threadAssociations": {
+          "associatedTicketId": "8001211"
+        },
+        "messages": [
+          {
+            "id": "m1211a",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T10:50:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "WHY IS THE DASHBOARD DOWN AGAIN?!?! WE NEED THIS FIXED RIGHT NOW!!! OUR WHOLE TEAM IS BLOCKED!!",
+            "senders": [
+              {
+                "actorId": "V-jamiechen",
+                "name": "Jamie Chen",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "jamie.chen@example.com"
+                }
+              }
+            ],
+            "archived": false
+          }
+        ]
+      }
+    },
+    {
+      "ticket": {
+        "id": "8001212",
+        "properties": {
+          "subject": "Contract question",
+          "hs_ticket_priority": "LOW",
+          "hs_pipeline": "0",
+          "hs_pipeline_stage": "1",
+          "frustration_score": null,
+          "frustration_last_alert_at": null,
+          "frustration_last_alert_tier": null
+        }
+      },
+      "company": {
+        "id": "7001212",
+        "properties": {
+          "name": "Orion Data",
+          "customer_tier": "Enterprise"
+        }
+      },
+      "contact": {
+        "id": "9001212",
+        "properties": {
+          "firstname": "Drew",
+          "lastname": "Ellis",
+          "email": "drew.ellis@example.com"
+        }
+      },
+      "thread": {
+        "id": "4001212",
+        "threadAssociations": {
+          "associatedTicketId": "8001212"
+        },
+        "messages": [
+          {
+            "id": "m1212a",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T10:55:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "Forwarding internally: please escalate, the customer is threatening to cancel.",
+            "senders": [
+              {
+                "actorId": "V-accountmanag",
+                "name": "Account Manager",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "account.manager@company.example"
+                }
+              }
+            ],
+            "archived": false
+          }
+        ]
+      }
+    },
+    {
+      "ticket": {
+        "id": "8001213",
+        "properties": {
+          "subject": "Webhook retries",
+          "hs_ticket_priority": "MEDIUM",
+          "hs_pipeline": "0",
+          "hs_pipeline_stage": "2",
+          "frustration_score": "10",
+          "frustration_last_alert_at": null,
+          "frustration_last_alert_tier": null
+        }
+      },
+      "company": {
+        "id": "7001213",
+        "properties": {
+          "name": "Tokyo Robotics",
+          "customer_tier": "Mid-Market"
+        }
+      },
+      "contact": {
+        "id": "9001213",
+        "properties": {
+          "firstname": "Kenji",
+          "lastname": "Sato",
+          "email": "kenji.sato@example.com"
+        }
+      },
+      "thread": {
+        "id": "4001213",
+        "threadAssociations": {
+          "associatedTicketId": "8001213"
+        },
+        "messages": [
+          {
+            "id": "m1213a",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T08:00:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "Webhooks are retrying twice for the same event, can you check?",
+            "senders": [
+              {
+                "actorId": "V-kenjisato",
+                "name": "Kenji Sato",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "kenji.sato@example.com"
+                }
+              }
+            ],
+            "archived": false
+          },
+          {
+            "id": "m1213b",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T08:40:00.000Z",
+            "direction": "OUTGOING",
+            "channelId": "1002",
+            "text": "Confirmed, fix is scheduled for this week.",
+            "senders": [
+              {
+                "actorId": "A-agentone",
+                "name": "Support Agent",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "agent.one@company.example"
+                }
+              }
+            ],
+            "archived": false
+          },
+          {
+            "id": "m1213c",
+            "type": "MESSAGE",
+            "createdAt": "2026-11-16T11:00:00.000Z",
+            "direction": "INCOMING",
+            "channelId": "1002",
+            "text": "Honestly getting frustrated now. This was supposed to be fixed last week and it is still not working.",
+            "senders": [
+              {
+                "actorId": "V-kenjisato",
+                "name": "Kenji Sato",
+                "deliveryIdentifier": {
+                  "type": "HS_EMAIL_ADDRESS",
+                  "value": "kenji.sato@example.com"
+                }
+              }
+            ],
+            "archived": false
+          }
+        ]
+      }
+    }
+  ]
+}
