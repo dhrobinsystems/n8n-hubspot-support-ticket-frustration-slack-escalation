@@ -62,6 +62,8 @@ I built this workflow to get that reply in front of a person within a minute. Wh
 
 ## 2. Architecture and Data Flow
 
+![HubSpot Support Ticket Frustration Slack Escalation Workflow Overview](./workflow-overview.png)
+
 ```mermaid
 flowchart LR
     WH[Ticket Reply Webhook<br/>conversation.newMessage · ticket.*] --> CFG
