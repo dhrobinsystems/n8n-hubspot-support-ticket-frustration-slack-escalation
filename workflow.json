@@ -1,0 +1,2251 @@
+{
+  "name": "HubSpot Support Ticket Frustration Slack Escalation (dhRobin Systems)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## n8n-hubspot-support-ticket-frustration-slack-escalation\n**dhRobin Systems** · HubSpot ticket replies (webhook, 10-min poll, or fixture) → conversation thread messages → keep genuine customer messages only (no agent notes, agent replies, auto-replies, bounces, internal senders) → frustration score 0–100 + sentiment regression → cooldown → Slack Block Kit escalation → optional HubSpot flag → audit.\n\n**Safe by default.** With no environment variables set:\n- `SANDBOX_MODE=true`: synthetic tickets. **Zero HubSpot or Slack calls.**\n- `DRY_RUN=true`, `SEND_SLACK_ALERTS=false`, `WRITE_TO_HUBSPOT=false`.",
+        "height": 360,
+        "width": 700,
+        "color": 5
+      },
+      "id": "767fe2ef-ac94-51ef-bdbd-4c59ed93d5ae",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -700,
+        -560
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Scoring\nLegal 45 · churn 32 · escalation 22 · frustration 20 · repetition 16 · urgency 10 (+3 per extra hit), negation-aware.\n+ exclamation runs, ALL-CAPS ratio, unanswered follow-ups; − positive language (never offsets legal/churn).\nTiers: critical ≥ 80 or any legal signal · high ≥ 60 · moderate ≥ 35.\nEscalate at ≥ `ESCALATE_MIN_TIER`, or on regression (Δ ≥ 20) at moderate+.",
+        "height": 250,
+        "width": 460,
+        "color": 6
+      },
+      "id": "e20078c1-8465-580f-8609-f03392e0ba11",
+      "name": "Scoring Notice",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2700,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Pinned synthetic payloads\nPinned: webhook, ticket search, thread lookup + messages (2 tickets), ticket / association / company / contact reads, Slack (2 alerts), ticket flags, run summary.\nPins apply to **manual executions only**. Unpin a node before a manual live test.",
+        "height": 200,
+        "width": 420,
+        "color": 3
+      },
+      "id": "f04db5b9-ec6f-5750-8ea7-70df7deafd75",
+      "name": "Pinned Data Notice",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hubspot/ticket-replies",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "8a87b626-af9c-5311-b17b-467742b19135",
+      "name": "Ticket Reply Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        40
+      ],
+      "webhookId": "068b5d70-ffce-50e9-ab8a-6d8f6edee010",
+      "notes": "HubSpot app webhooks (conversation.newMessage, ticket.*) or a workflow webhook { ticketId }.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "5774c140-9e1f-50bb-99da-6b0ed6a159b9",
+      "name": "Polling Fallback Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -640,
+        220
+      ],
+      "notes": "Every 10 minutes: tickets modified within POLL_LOOKBACK_MINUTES.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "84373d97-f137-594c-9610-9036ee2d0f97",
+      "name": "Manual Test Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -640,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12b998c0-35de-561e-9aa8-9fd41f2290a8",
+              "name": "config.sandboxMode",
+              "value": "={{ String($env.SANDBOX_MODE ?? 'true').trim().toLowerCase() !== 'false' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "2de1254b-2b92-5c5a-91c2-229533ba923d",
+              "name": "config.dryRun",
+              "value": "={{ String($env.DRY_RUN ?? 'true').trim().toLowerCase() !== 'false' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "a8684cf7-1555-55af-b676-0e2aadbe16aa",
+              "name": "config.sendSlackAlerts",
+              "value": "={{ !(String($env.SANDBOX_MODE ?? 'true').trim().toLowerCase() !== 'false') && !(String($env.DRY_RUN ?? 'true').trim().toLowerCase() !== 'false') && String($env.SEND_SLACK_ALERTS ?? 'false').trim().toLowerCase() === 'true' && Boolean(String($env.SLACK_ESCALATION_WEBHOOK_URL ?? '').trim()) }}",
+              "type": "boolean"
+            },
+            {
+              "id": "06730d53-712c-5ca4-9971-648197019c41",
+              "name": "config.writeToHubspot",
+              "value": "={{ !(String($env.SANDBOX_MODE ?? 'true').trim().toLowerCase() !== 'false') && !(String($env.DRY_RUN ?? 'true').trim().toLowerCase() !== 'false') && String($env.WRITE_TO_HUBSPOT ?? 'false').trim().toLowerCase() === 'true' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "a313675e-483a-5a72-8e05-c8e92a65f5c5",
+              "name": "config.webhookEnabled",
+              "value": "={{ !(String($env.SANDBOX_MODE ?? 'true').trim().toLowerCase() !== 'false') && !(String($env.DRY_RUN ?? 'true').trim().toLowerCase() !== 'false') && Boolean(String($env.ALERT_WEBHOOK_URL ?? '').trim()) }}",
+              "type": "boolean"
+            },
+            {
+              "id": "e2bc742c-b66b-5509-9153-b61bdbc57189",
+              "name": "config.notifyOnEveryRun",
+              "value": "={{ String($env.NOTIFY_ON_EVERY_RUN ?? 'false').trim().toLowerCase() === 'true' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "304e7a4c-8c7d-5c32-b7d5-a6a02d2e037a",
+              "name": "config.escalateMinTier",
+              "value": "={{ ['moderate', 'high', 'critical'].includes(String($env.ESCALATE_MIN_TIER ?? 'high').trim().toLowerCase()) ? String($env.ESCALATE_MIN_TIER ?? 'high').trim().toLowerCase() : 'high' }}",
+              "type": "string"
+            },
+            {
+              "id": "85502139-f803-5a6a-96ba-b0b64d8fbc92",
+              "name": "config.criticalThreshold",
+              "value": "={{ Math.min(100, Math.max(1, Number.isFinite(parseFloat($env.CRITICAL_SCORE_THRESHOLD)) ? Math.round(parseFloat($env.CRITICAL_SCORE_THRESHOLD)) : 80)) }}",
+              "type": "number"
+            },
+            {
+              "id": "5af169b5-d0ea-56ed-9b4c-1d42ff893336",
+              "name": "config.highThreshold",
+              "value": "={{ Math.min(100, Math.max(1, Number.isFinite(parseFloat($env.FRUSTRATION_SCORE_THRESHOLD)) ? Math.round(parseFloat($env.FRUSTRATION_SCORE_THRESHOLD)) : 60)) }}",
+              "type": "number"
+            },
+            {
+              "id": "f2d11480-00a3-57b5-9153-2ed788123c77",
+              "name": "config.moderateThreshold",
+              "value": "={{ Math.min(100, Math.max(1, Number.isFinite(parseFloat($env.MODERATE_SCORE_THRESHOLD)) ? Math.round(parseFloat($env.MODERATE_SCORE_THRESHOLD)) : 35)) }}",
+              "type": "number"
+            },
+            {
+              "id": "43ff3922-02e6-553b-83ee-8091d08e47a2",
+              "name": "config.regressionDelta",
+              "value": "={{ Math.min(100, Math.max(1, Number.isFinite(parseFloat($env.REGRESSION_DELTA)) ? Math.round(parseFloat($env.REGRESSION_DELTA)) : 20)) }}",
+              "type": "number"
+            },
+            {
+              "id": "3be636a1-6556-5b2f-ad2b-25b1f92c17b6",
+              "name": "config.regressionMinScore",
+              "value": "={{ Math.min(100, Math.max(0, Number.isFinite(parseFloat($env.REGRESSION_MIN_SCORE)) ? Math.round(parseFloat($env.REGRESSION_MIN_SCORE)) : 30)) }}",
+              "type": "number"
+            },
+            {
+              "id": "0578be0e-1040-51df-9816-9f46acea3474",
+              "name": "config.keywordWeights",
+              "value": "={{ (() => { try { const j = JSON.parse(String($env.KEYWORD_WEIGHTS ?? '{}') || '{}'); return j && typeof j === 'object' && !Array.isArray(j) ? j : {}; } catch (e) { return {}; } })() }}",
+              "type": "object"
+            },
+            {
+              "id": "06a252fc-5743-55bd-8168-23e853b22da0",
+              "name": "config.extraKeywords",
+              "value": "={{ String($env.EXTRA_KEYWORDS ?? '').split('|').map(x => x.trim()).filter(x => x.includes(':')) }}",
+              "type": "array"
+            },
+            {
+              "id": "09b1079d-0ab1-55f4-b52a-cf4eb3fc40d4",
+              "name": "config.cooldownHours",
+              "value": "={{ Math.min(720, Math.max(0, Number.isFinite(parseFloat($env.COOLDOWN_HOURS)) ? Math.round(parseFloat($env.COOLDOWN_HOURS)) : 12)) }}",
+              "type": "number"
+            },
+            {
+              "id": "a27319a8-705e-5b28-84c9-792456b48d88",
+              "name": "config.maxTicketsPerRun",
+              "value": "={{ Math.min(100, Math.max(1, Number.isFinite(parseFloat($env.MAX_TICKETS_PER_RUN)) ? Math.round(parseFloat($env.MAX_TICKETS_PER_RUN)) : 50)) }}",
+              "type": "number"
+            },
+            {
+              "id": "91285c5b-2351-5430-bf69-731d39b104f1",
+              "name": "config.maxAlertsPerRun",
+              "value": "={{ Math.min(100, Math.max(1, Number.isFinite(parseFloat($env.MAX_ALERTS_PER_RUN)) ? Math.round(parseFloat($env.MAX_ALERTS_PER_RUN)) : 20)) }}",
+              "type": "number"
+            },
+            {
+              "id": "5ca13880-9e56-591c-9464-7954decc2cc1",
+              "name": "config.pollLookbackMinutes",
+              "value": "={{ Math.min(1440, Math.max(5, Number.isFinite(parseFloat($env.POLL_LOOKBACK_MINUTES)) ? Math.round(parseFloat($env.POLL_LOOKBACK_MINUTES)) : 20)) }}",
+              "type": "number"
+            },
+            {
+              "id": "238ede4b-0586-59d4-ad42-a5fbdde30e04",
+              "name": "config.pollDateProperty",
+              "value": "={{ (p => /^[a-z][a-z0-9_]{0,99}$/.test(p) ? p : '')(String($env.POLL_DATE_PROPERTY ?? 'hs_lastmodifieddate').trim().toLowerCase()) }}",
+              "type": "string"
+            },
+            {
+              "id": "48bd27e9-b044-5abd-8f11-f223b5821e63",
+              "name": "config.closedStageIds",
+              "value": "={{ String($env.CLOSED_STAGE_IDS ?? '').toLowerCase().split(',').map(x => x.trim()).filter(Boolean) }}",
+              "type": "array"
+            },
+            {
+              "id": "7ee848bf-4b5c-5847-b9cc-81608aaea636",
+              "name": "config.internalDomains",
+              "value": "={{ String($env.INTERNAL_EMAIL_DOMAINS ?? '').toLowerCase().split(',').map(x => x.trim()).filter(Boolean).length ? String($env.INTERNAL_EMAIL_DOMAINS ?? '').toLowerCase().split(',').map(x => x.trim()).filter(Boolean) : ((String($env.SANDBOX_MODE ?? 'true').trim().toLowerCase() !== 'false') ? ['company.example'] : []) }}",
+              "type": "array"
+            },
+            {
+              "id": "b6c74594-3b6e-5a6a-af6f-3fa7ed9828f6",
+              "name": "config.scoreProperty",
+              "value": "={{ (p => /^[a-z][a-z0-9_]{0,99}$/.test(p) ? p : '')(String($env.FRUSTRATION_SCORE_PROPERTY ?? 'frustration_score').trim().toLowerCase()) }}",
+              "type": "string"
+            },
+            {
+              "id": "177b244f-e820-53b8-a0fc-7468424c9f0f",
+              "name": "config.flagProperty",
+              "value": "={{ (p => /^[a-z][a-z0-9_]{0,99}$/.test(p) ? p : '')(String($env.FLAG_PROPERTY ?? 'frustration_escalation_flag').trim().toLowerCase()) }}",
+              "type": "string"
+            },
+            {
+              "id": "5577b616-b6cc-528b-a3cd-06ef6c93b7b8",
+              "name": "config.lastAlertProperty",
+              "value": "={{ (p => /^[a-z][a-z0-9_]{0,99}$/.test(p) ? p : '')(String($env.LAST_ALERT_PROPERTY ?? 'frustration_last_alert_at').trim().toLowerCase()) }}",
+              "type": "string"
+            },
+            {
+              "id": "22e50f1b-4565-5b6d-ac15-7e089769bb8e",
+              "name": "config.lastAlertTierProperty",
+              "value": "={{ (p => /^[a-z][a-z0-9_]{0,99}$/.test(p) ? p : '')(String($env.LAST_ALERT_TIER_PROPERTY ?? 'frustration_last_alert_tier').trim().toLowerCase()) }}",
+              "type": "string"
+            },
+            {
+              "id": "101bac45-b917-55e9-95f3-5ff7443f212f",
+              "name": "config.raisePriority",
+              "value": "={{ String($env.RAISE_PRIORITY ?? 'true').trim().toLowerCase() !== 'false' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "ae58cf25-1638-5096-9097-23f6bed568e5",
+              "name": "config.companyTierProperty",
+              "value": "={{ (p => /^[a-z][a-z0-9_]{0,99}$/.test(p) ? p : '')(String($env.COMPANY_TIER_PROPERTY ?? 'customer_tier').trim().toLowerCase()) }}",
+              "type": "string"
+            },
+            {
+              "id": "76c0ee2e-8fb2-5ff1-8c42-c2ac7ede878c",
+              "name": "config.includePreview",
+              "value": "={{ String($env.INCLUDE_MESSAGE_PREVIEW ?? 'true').trim().toLowerCase() !== 'false' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "00999a4e-203a-536a-9dc1-5d238751fcc2",
+              "name": "config.previewChars",
+              "value": "={{ Math.min(1000, Math.max(0, Number.isFinite(parseFloat($env.PREVIEW_CHARS)) ? Math.round(parseFloat($env.PREVIEW_CHARS)) : 280)) }}",
+              "type": "number"
+            },
+            {
+              "id": "1d4e598d-e25e-5b9c-aef7-f4ace2e45eee",
+              "name": "config.showContactName",
+              "value": "={{ String($env.SHOW_CONTACT_NAME ?? 'false').trim().toLowerCase() === 'true' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "fe0d1b31-5c88-5746-ae8b-5cdd3a9e59c5",
+              "name": "config.portalId",
+              "value": "={{ /^\\d+$/.test(String($env.HUBSPOT_PORTAL_ID ?? '').trim()) ? String($env.HUBSPOT_PORTAL_ID).trim() : '' }}",
+              "type": "string"
+            },
+            {
+              "id": "8454f55b-02e7-57c8-9274-88c2dfd00203",
+              "name": "config.ticketUrlTemplate",
+              "value": "={{ String($env.HUBSPOT_TICKET_URL_TEMPLATE ?? 'https://app.hubspot.com/contacts/{portalId}/record/0-5/{ticketId}').trim() || 'https://app.hubspot.com/contacts/{portalId}/record/0-5/{ticketId}' }}",
+              "type": "string"
+            },
+            {
+              "id": "293ecf9e-1229-5c72-8e62-427ba0a3b5e4",
+              "name": "config.hubspotAppId",
+              "value": "={{ String($env.HUBSPOT_APP_ID ?? '').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "9722ce1f-7203-57d7-a6b0-51a52510aa1b",
+              "name": "config.requireSignature",
+              "value": "={{ String($env.REQUIRE_HUBSPOT_SIGNATURE ?? 'true').trim().toLowerCase() !== 'false' }}",
+              "type": "boolean"
+            },
+            {
+              "id": "7e8003cc-5098-5a5d-aeb6-5fc12fdb1ea8",
+              "name": "config.webhookPublicUrl",
+              "value": "={{ String($env.HUBSPOT_WEBHOOK_PUBLIC_URL ?? '').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "58ab08d7-5e90-5c5f-bbf8-e9bf6ba622ab",
+              "name": "config.hubspotBaseUrl",
+              "value": "={{ String($env.HUBSPOT_API_BASE_URL ?? 'https://api.hubapi.com').trim().replace(/\\/+$/, '') || 'https://api.hubapi.com' }}",
+              "type": "string"
+            },
+            {
+              "id": "a706e1c9-3835-5b93-943a-03d84286621a",
+              "name": "config.runId",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "e8e7aef5-9607-51aa-bfa3-a03f36e3530b",
+              "name": "config.executionMode",
+              "value": "={{ $execution.mode }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aa354231-6c6f-5cc9-aeda-ce87b3528642",
+      "name": "Config & Safety Gate",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -420,
+        220
+      ],
+      "notes": "Typed, non-secret configuration under config.*. Flags record only whether a secret or URL is set.",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "209e99ae-61ca-58b1-a18f-87b4ef34e1a9",
+              "leftValue": "={{ $('Ticket Reply Webhook').isExecuted }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "22abb88f-407d-5ac0-b291-4b2fb38d14c3",
+      "name": "From Webhook?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -200,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Parse & Verify Webhook Events\n// Accepts HubSpot app webhook batches:\n//   conversation.newMessage                → threadId (+ messageId)\n//   ticket.creation / ticket.propertyChange → ticketId\n// and a simple custom body ({ \"ticketId\": \"…\" } or { \"ticketIds\": [...] }) from\n// a HubSpot workflow webhook action. Verifies the HubSpot v3 signature outside\n// sandbox, ignores this integration's own property writes (loop guard) and\n// de-duplicates.\n// Security note: HUBSPOT_APP_CLIENT_SECRET is read here only because an HMAC\n// cannot be computed in an HTTP header field. It never leaves this node.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst req = $('Ticket Reply Webhook').first().json;\nconst headers = Object.fromEntries(Object.entries(req.headers || {}).map(([k, v]) => [k.toLowerCase(), String(v)]));\nlet signature = 'skipped (sandbox)';\nif (!cfg.sandboxMode && cfg.requireSignature) {\n  const sig = headers['x-hubspot-signature-v3']; const ts = headers['x-hubspot-request-timestamp'];\n  if (!sig || !ts) throw new Error('Rejected: missing HubSpot v3 signature headers.');\n  if (!Number.isFinite(Number(ts)) || Math.abs(Date.now() - Number(ts)) > 300000) throw new Error('Rejected: HubSpot request timestamp outside the 5-minute window.');\n  let secret = ''; try { secret = String($env.HUBSPOT_APP_CLIENT_SECRET || ''); } catch (e) { secret = ''; }\n  if (!secret) throw new Error('Rejected: HUBSPOT_APP_CLIENT_SECRET is not set and REQUIRE_HUBSPOT_SIGNATURE is not false.');\n  let crypto; try { crypto = require('crypto'); } catch (e) { throw new Error('Signature verification needs NODE_FUNCTION_ALLOW_BUILTIN=crypto.'); }\n  const raw = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);\n  const expected = crypto.createHmac('sha256', secret).update(`POST${cfg.webhookPublicUrl || req.webhookUrl}${raw}${ts}`, 'utf8').digest('base64');\n  const a = Buffer.from(String(sig)); const b = Buffer.from(expected);\n  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) throw new Error('Rejected: HubSpot v3 signature mismatch.');\n  signature = 'verified';\n} else if (!cfg.sandboxMode) signature = 'disabled (REQUIRE_HUBSPOT_SIGNATURE=false)';\n\nlet body = req.body;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }\nconst events = Array.isArray(body) ? body : [body];\nconst OWN = new Set([cfg.flagProperty, cfg.scoreProperty, cfg.lastAlertProperty, cfg.lastAlertTierProperty, 'hs_ticket_priority'].filter(Boolean));\nconst items = []; const ignored = [];\nconst seen = new Set();\nconst push = (it) => { const k = it.threadId ? `th:${it.threadId}` : `tk:${it.ticketId}`; if (!seen.has(k)) { seen.add(k); items.push(it); } };\nfor (const e of events) {\n  if (!e || typeof e !== 'object') continue;\n  if (e.subscriptionType) {\n    if (cfg.hubspotAppId && String(e.sourceId || '') === cfg.hubspotAppId) { ignored.push({ reason: 'own_write', objectId: e.objectId }); continue; }\n    if (e.subscriptionType === 'conversation.newMessage') push({ threadId: String(e.objectId), messageId: e.messageId ? String(e.messageId) : null, ticketId: null });\n    else if (/^ticket\\./.test(e.subscriptionType)) {\n      if (e.propertyName && OWN.has(e.propertyName)) { ignored.push({ reason: 'own_property', objectId: e.objectId }); continue; }\n      push({ ticketId: String(e.objectId), threadId: null, messageId: null });\n    } else ignored.push({ reason: `unsupported_${e.subscriptionType}`, objectId: e.objectId });\n  } else {\n    for (const id of [e.ticketId, e.ticket_id, e.objectId, ...(Array.isArray(e.ticketIds) ? e.ticketIds : [])].filter(Boolean)) if (/^\\d+$/.test(String(id))) push({ ticketId: String(id), threadId: null, messageId: null });\n  }\n}\nreturn [{ json: { signature, received: events.length, items: items.slice(0, cfg.maxTicketsPerRun), ignored } }];\n"
+      },
+      "id": "1ede60f9-d0bc-5450-9981-cf117da86abf",
+      "name": "Parse & Verify Webhook Events",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20,
+        100
+      ],
+      "notes": "v3 signature, event types, loop guard, de-duplication.",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "bf831df0-4129-5b2b-9775-684eb61d5331",
+              "leftValue": "={{ $('Config & Safety Gate').first().json.config.sandboxMode }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8ff1e04e-e8db-53fc-979b-4d4b879ca23c",
+      "name": "Sandbox Mode?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        240,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Mock Ticket Context (SANDBOX_MODE=true)\n// sample-payloads/hubspot-ticket-replies.json → the same shape \"Assemble Ticket\n// Context\" builds on the live path. _relative offsets are resolved against\n// now, so the cooldown scenario stays stable. A webhook received in sandbox\n// limits the fixture to the ticket IDs it names (if any). No HubSpot call.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst FIXTURE = {\n  \"_comment\": \"Synthetic fixture. Ticket, thread and message shapes follow the HubSpot CRM tickets API and the Conversations v3 threads/messages API. All people, companies, emails (@example.com / @company.example) and IDs are fictitious; the phone number uses the fictional 555-01xx range. _relative values are resolved against the current time by the sandbox node. Expected results: README \\u00a75.\",\n  \"tickets\": [\n    {\n      \"ticket\": {\n        \"id\": \"8001201\",\n        \"properties\": {\n          \"subject\": \"Data sync failing\",\n          \"hs_ticket_priority\": \"MEDIUM\",\n          \"hs_pipeline\": \"0\",\n          \"hs_pipeline_stage\": \"2\",\n          \"frustration_score\": null,\n          \"frustration_last_alert_at\": null,\n          \"frustration_last_alert_tier\": null\n        }\n      },\n      \"company\": {\n        \"id\": \"7001201\",\n        \"properties\": {\n          \"name\": \"Acme Cloud Solutions\",\n          \"customer_tier\": \"Enterprise\"\n        }\n      },\n      \"contact\": {\n        \"id\": \"9001201\",\n        \"properties\": {\n          \"firstname\": \"Alex\",\n          \"lastname\": \"Rivera\",\n          \"email\": \"alex.rivera@example.com\"\n        }\n      },\n      \"thread\": {\n        \"id\": \"4001201\",\n        \"threadAssociations\": {\n          \"associatedTicketId\": \"8001201\"\n        },\n        \"messages\": [\n          {\n            \"id\": \"m1201a\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T08:00:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Hi, our nightly data sync failed again. Can you take a look?\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-alexrivera\",\n                \"name\": \"Alex Rivera\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"alex.rivera@example.com\"\n                }\n              }\n            ],\n            \"archived\": false\n          },\n          {\n            \"id\": \"m1201b\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T08:30:00.000Z\",\n            \"direction\": \"OUTGOING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Thanks Alex, we are investigating and will update you shortly.\",\n            \"senders\": [\n              {\n                \"actorId\": \"A-agentone\",\n                \"name\": \"Support Agent\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"agent.one@company.example\"\n                }\n              }\n            ],\n            \"archived\": false\n          },\n          {\n            \"id\": \"m1201c\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T10:05:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"This is UNACCEPTABLE. This is the third time the sync is broken again this month. If this isn't fixed today we will cancel, and our lawyer is already reviewing the contract!!! Call me on +1-202-555-0148.\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-alexrivera\",\n                \"name\": \"Alex Rivera\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"alex.rivera@example.com\"\n                }\n              }\n            ],\n            \"archived\": false\n          }\n        ]\n      }\n    },\n    {\n      \"ticket\": {\n        \"id\": \"8001202\",\n        \"properties\": {\n          \"subject\": \"Export button not working\",\n          \"hs_ticket_priority\": \"LOW\",\n          \"hs_pipeline\": \"0\",\n          \"hs_pipeline_stage\": \"2\",\n          \"frustration_score\": null,\n          \"frustration_last_alert_at\": null,\n          \"frustration_last_alert_tier\": null\n        }\n      },\n      \"company\": {\n        \"id\": \"7001202\",\n        \"properties\": {\n          \"name\": \"Northstar Logistics\",\n          \"customer_tier\": \"Growth\"\n        }\n      },\n      \"contact\": {\n        \"id\": \"9001202\",\n        \"properties\": {\n          \"firstname\": \"Jordan\",\n          \"lastname\": \"Taylor\",\n          \"email\": \"jordan.taylor@example.com\"\n        }\n      },\n      \"thread\": {\n        \"id\": \"4001202\",\n        \"threadAssociations\": {\n          \"associatedTicketId\": \"8001202\"\n        },\n        \"messages\": [\n          {\n            \"id\": \"m1202a\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T06:00:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"The CSV export button does nothing when I click it.\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-jordantaylor\",\n                \"name\": \"Jordan Taylor\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"jordan.taylor@example.com\"\n                }\n              }\n            ],\n            \"archived\": false\n          },\n          {\n            \"id\": \"m1202b\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T06:20:00.000Z\",\n            \"direction\": \"OUTGOING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Thanks Jordan, logging this with engineering.\",\n            \"senders\": [\n              {\n                \"actorId\": \"A-agentone\",\n                \"name\": \"Support Agent\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"agent.one@company.example\"\n                }\n              }\n            ],\n            \"archived\": false\n          },\n          {\n            \"id\": \"m1202c\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T08:00:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Any update on this?\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-jordantaylor\",\n                \"name\": \"Jordan Taylor\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"jordan.taylor@example.com\"\n                }\n              }\n            ],\n            \"archived\": false\n          },\n          {\n            \"id\": \"m1202d\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T09:00:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Still waiting on this, the team needs the export for month-end.\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-jordantaylor\",\n                \"name\": \"Jordan Taylor\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"jordan.taylor@example.com\"\n                }\n              }\n            ],\n            \"archived\": false\n          },\n          {\n            \"id\": \"m1202e\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T10:10:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Still waiting. Nobody has responded in two days and I keep asking. Please escalate this to a manager.\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-jordantaylor\",\n                \"name\": \"Jordan Taylor\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"jordan.taylor@example.com\"\n                }\n              }\n            ],\n            \"archived\": false\n          }\n        ]\n      }\n    },\n    {\n      \"ticket\": {\n        \"id\": \"8001203\",\n        \"properties\": {\n          \"subject\": \"API pagination question\",\n          \"hs_ticket_priority\": \"LOW\",\n          \"hs_pipeline\": \"0\",\n          \"hs_pipeline_stage\": \"1\",\n          \"frustration_score\": null,\n          \"frustration_last_alert_at\": null,\n          \"frustration_last_alert_tier\": null\n        }\n      },\n      \"company\": {\n        \"id\": \"7001203\",\n        \"properties\": {\n          \"name\": \"Bavaria Precision Engineering\",\n          \"customer_tier\": \"Mid-Market\"\n        }\n      },\n      \"contact\": {\n        \"id\": \"9001203\",\n        \"properties\": {\n          \"firstname\": \"Lena\",\n          \"lastname\": \"Vogel\",\n          \"email\": \"lena.vogel@example.com\"\n        }\n      },\n      \"thread\": {\n        \"id\": \"4001203\",\n        \"threadAssociations\": {\n          \"associatedTicketId\": \"8001203\"\n        },\n        \"messages\": [\n          {\n            \"id\": \"m1203a\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T10:00:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Quick question: what is the maximum page size for the orders endpoint, and is the cursor stable across deploys?\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-lenavogel\",\n                \"name\": \"Lena Vogel\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"lena.vogel@example.com\"\n                }\n              }\n            ],\n            \"archived\": false\n          }\n        ]\n      }\n    },\n    {\n      \"ticket\": {\n        \"id\": \"8001204\",\n        \"properties\": {\n          \"subject\": \"Billing address change\",\n          \"hs_ticket_priority\": \"LOW\",\n          \"hs_pipeline\": \"0\",\n          \"hs_pipeline_stage\": \"1\",\n          \"frustration_score\": null,\n          \"frustration_last_alert_at\": null,\n          \"frustration_last_alert_tier\": null\n        }\n      },\n      \"company\": {\n        \"id\": \"7001204\",\n        \"properties\": {\n          \"name\": \"Harbor Freightways\",\n          \"customer_tier\": \"Growth\"\n        }\n      },\n      \"contact\": {\n        \"id\": \"9001204\",\n        \"properties\": {\n          \"firstname\": \"Sam\",\n          \"lastname\": \"Patel\",\n          \"email\": \"sam.patel@example.com\"\n        }\n      },\n      \"thread\": {\n        \"id\": \"4001204\",\n        \"threadAssociations\": {\n          \"associatedTicketId\": \"8001204\"\n        },\n        \"messages\": [\n          {\n            \"id\": \"m1204a\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T09:00:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Could you update the billing address on our account? The new one is attached.\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-sampatel\",\n                \"name\": \"Sam Patel\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"sam.patel@example.com\"\n                }\n              }\n            ],\n            \"archived\": false\n          },\n          {\n            \"id\": \"m1204b\",\n            \"type\": \"COMMENT\",\n            \"createdAt\": \"2026-11-16T10:20:00.000Z\",\n            \"direction\": \"OUTGOING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Internal: customer sounded furious on the phone, might cancel. Escalate to manager if this slips.\",\n            \"senders\": [\n              {\n                \"actorId\": \"A-agentone\",\n                \"name\": \"Support Agent\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"agent.one@company.example\"\n                }\n              }\n            ],\n            \"archived\": false\n          }\n        ]\n      }\n    },\n    {\n      \"ticket\": {\n        \"id\": \"8001205\",\n        \"properties\": {\n          \"subject\": \"Onboarding call follow-up\",\n          \"hs_ticket_priority\": \"LOW\",\n          \"hs_pipeline\": \"0\",\n          \"hs_pipeline_stage\": \"2\",\n          \"frustration_score\": null,\n          \"frustration_last_alert_at\": null,\n          \"frustration_last_alert_tier\": null\n        }\n      },\n      \"company\": {\n        \"id\": \"7001205\",\n        \"properties\": {\n          \"name\": \"Lumiere Optique\",\n          \"customer_tier\": \"Enterprise\"\n        }\n      },\n      \"contact\": {\n        \"id\": \"9001205\",\n        \"properties\": {\n          \"firstname\": \"Camille\",\n          \"lastname\": \"Durand\",\n          \"email\": \"camille.durand@example.com\"\n        }\n      },\n      \"thread\": {\n        \"id\": \"4001205\",\n        \"threadAssociations\": {\n          \"associatedTicketId\": \"8001205\"\n        },\n        \"messages\": [\n          {\n            \"id\": \"m1205a\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T09:00:00.000Z\",\n            \"direction\": \"OUTGOING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Hi Camille, sharing the recording from today's onboarding call.\",\n            \"senders\": [\n              {\n                \"actorId\": \"A-agentone\",\n                \"name\": \"Support Agent\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"agent.one@company.example\"\n                }\n              }\n            ],\n            \"archived\": false\n          },\n          {\n            \"id\": \"m1205b\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T09:01:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Automatic reply: I am out of the office until Monday with limited access to email. For anything urgent or if this is unacceptable to wait, please contact our team lead.\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-camilleduran\",\n                \"name\": \"Camille Durand\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"camille.durand@example.com\"\n                }\n              }\n            ],\n            \"archived\": false,\n            \"subject\": \"Automatic reply: Onboarding call follow-up\"\n          }\n        ]\n      }\n    },\n    {\n      \"ticket\": {\n        \"id\": \"8001206\",\n        \"properties\": {\n          \"subject\": \"SSO login loop\",\n          \"hs_ticket_priority\": \"HIGH\",\n          \"hs_pipeline\": \"0\",\n          \"hs_pipeline_stage\": \"3\",\n          \"frustration_score\": \"48\",\n          \"frustration_last_alert_at\": null,\n          \"frustration_last_alert_tier\": null\n        }\n      },\n      \"company\": {\n        \"id\": \"7001206\",\n        \"properties\": {\n          \"name\": \"Kiwi Orchard\",\n          \"customer_tier\": \"Enterprise\"\n        }\n      },\n      \"contact\": {\n        \"id\": \"9001206\",\n        \"properties\": {\n          \"firstname\": \"Riley\",\n          \"lastname\": \"Ford\",\n          \"email\": \"riley.ford@example.com\"\n        }\n      },\n      \"thread\": {\n        \"id\": \"4001206\",\n        \"threadAssociations\": {\n          \"associatedTicketId\": \"8001206\"\n        },\n        \"messages\": [\n          {\n            \"id\": \"m1206a\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T07:00:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Our users are stuck in an SSO login loop, this is urgent and frustrating.\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-rileyford\",\n                \"name\": \"Riley Ford\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"riley.ford@example.com\"\n                }\n              }\n            ],\n            \"archived\": false\n          },\n          {\n            \"id\": \"m1206b\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T09:30:00.000Z\",\n            \"direction\": \"OUTGOING\",\n            \"channelId\": \"1002\",\n            \"text\": \"We've deployed a fix. Can you confirm it works now?\",\n            \"senders\": [\n              {\n                \"actorId\": \"A-agentone\",\n                \"name\": \"Support Agent\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"agent.one@company.example\"\n                }\n              }\n            ],\n            \"archived\": false\n          },\n          {\n            \"id\": \"m1206c\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T10:15:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Thanks so much, that fixed it! Really appreciate the quick help from the team.\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-rileyford\",\n                \"name\": \"Riley Ford\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"riley.ford@example.com\"\n                }\n              }\n            ],\n            \"archived\": false\n          }\n        ]\n      }\n    },\n    {\n      \"ticket\": {\n        \"id\": \"8001207\",\n        \"properties\": {\n          \"subject\": \"Missing invoices\",\n          \"hs_ticket_priority\": \"MEDIUM\",\n          \"hs_pipeline\": \"0\",\n          \"hs_pipeline_stage\": \"2\",\n          \"frustration_score\": null,\n          \"frustration_last_alert_at\": null,\n          \"frustration_last_alert_tier\": null\n        }\n      },\n      \"company\": {\n        \"id\": \"7001207\",\n        \"properties\": {\n          \"name\": \"Rotterdam Freight\",\n          \"customer_tier\": \"Mid-Market\"\n        }\n      },\n      \"contact\": {\n        \"id\": \"9001207\",\n        \"properties\": {\n          \"firstname\": \"Noor\",\n          \"lastname\": \"Haddad\",\n          \"email\": \"noor.haddad@example.com\"\n        }\n      },\n      \"thread\": {\n        \"id\": \"4001207\",\n        \"threadAssociations\": {\n          \"associatedTicketId\": \"8001207\"\n        },\n        \"messages\": [\n          {\n            \"id\": \"m1207a\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T10:30:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"We still have not received last month's invoices. We are seriously considering switching to another vendor and expect a refund for this month.\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-noorhaddad\",\n                \"name\": \"Noor Haddad\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"noor.haddad@example.com\"\n                }\n              }\n            ],\n            \"archived\": false\n          }\n        ]\n      }\n    },\n    {\n      \"ticket\": {\n        \"id\": \"8001208\",\n        \"properties\": {\n          \"subject\": \"Report scheduling broken\",\n          \"hs_ticket_priority\": \"HIGH\",\n          \"hs_pipeline\": \"0\",\n          \"hs_pipeline_stage\": \"2\",\n          \"frustration_score\": \"72\",\n          \"frustration_last_alert_at\": null,\n          \"frustration_last_alert_tier\": \"high\"\n        }\n      },\n      \"company\": {\n        \"id\": \"7001208\",\n        \"properties\": {\n          \"name\": \"Andes Mining\",\n          \"customer_tier\": \"Enterprise\"\n        }\n      },\n      \"contact\": {\n        \"id\": \"9001208\",\n        \"properties\": {\n          \"firstname\": \"Morgan\",\n          \"lastname\": \"Quinn\",\n          \"email\": \"morgan.quinn@example.com\"\n        }\n      },\n      \"thread\": {\n        \"id\": \"4001208\",\n        \"threadAssociations\": {\n          \"associatedTicketId\": \"8001208\"\n        },\n        \"messages\": [\n          {\n            \"id\": \"m1208a\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T10:40:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Scheduled reports are broken again. This is unacceptable and I want this escalated to your manager today.\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-morganquinn\",\n                \"name\": \"Morgan Quinn\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"morgan.quinn@example.com\"\n                }\n              }\n            ],\n            \"archived\": false\n          }\n        ]\n      },\n      \"_relative\": {\n        \"lastAlertHoursAgo\": 2\n      }\n    },\n    {\n      \"ticket\": {\n        \"id\": \"8001209\",\n        \"properties\": {\n          \"subject\": \"Typo in invoice template\",\n          \"hs_ticket_priority\": \"LOW\",\n          \"hs_pipeline\": \"0\",\n          \"hs_pipeline_stage\": \"1\",\n          \"frustration_score\": null,\n          \"frustration_last_alert_at\": null,\n          \"frustration_last_alert_tier\": null\n        }\n      },\n      \"company\": {\n        \"id\": \"7001209\",\n        \"properties\": {\n          \"name\": \"Milano Tessile\",\n          \"customer_tier\": \"Growth\"\n        }\n      },\n      \"contact\": {\n        \"id\": \"9001209\",\n        \"properties\": {\n          \"firstname\": \"Casey\",\n          \"lastname\": \"Brooks\",\n          \"email\": \"casey.brooks@example.com\"\n        }\n      },\n      \"thread\": {\n        \"id\": \"4001209\",\n        \"threadAssociations\": {\n          \"associatedTicketId\": \"8001209\"\n        },\n        \"messages\": [\n          {\n            \"id\": \"m1209a\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T10:45:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"No need to escalate, and we're not going to cancel anything. Just flagging a small typo in the invoice footer.\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-caseybrooks\",\n                \"name\": \"Casey Brooks\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"casey.brooks@example.com\"\n                }\n              }\n            ],\n            \"archived\": false\n          }\n        ]\n      }\n    },\n    {\n      \"ticket\": {\n        \"id\": \"8001210\",\n        \"properties\": {\n          \"subject\": \"Renewal paperwork\",\n          \"hs_ticket_priority\": \"LOW\",\n          \"hs_pipeline\": \"0\",\n          \"hs_pipeline_stage\": \"1\",\n          \"frustration_score\": null,\n          \"frustration_last_alert_at\": null,\n          \"frustration_last_alert_tier\": null\n        }\n      },\n      \"company\": {\n        \"id\": \"7001210\",\n        \"properties\": {\n          \"name\": \"Summit Legal Partners\",\n          \"customer_tier\": \"Growth\"\n        }\n      },\n      \"contact\": {\n        \"id\": \"9001210\",\n        \"properties\": {\n          \"firstname\": \"Taylor\",\n          \"lastname\": \"Morgan\",\n          \"email\": \"taylor.morgan@example.com\"\n        }\n      },\n      \"thread\": {\n        \"id\": \"4001210\",\n        \"threadAssociations\": {\n          \"associatedTicketId\": \"8001210\"\n        },\n        \"messages\": [\n          {\n            \"id\": \"m1210a\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T10:00:00.000Z\",\n            \"direction\": \"OUTGOING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Hi Taylor, attaching the renewal paperwork.\",\n            \"senders\": [\n              {\n                \"actorId\": \"A-agentone\",\n                \"name\": \"Support Agent\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"agent.one@company.example\"\n                }\n              }\n            ],\n            \"archived\": false\n          },\n          {\n            \"id\": \"m1210b\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T10:01:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Delivery Status Notification (Failure). Your message could not be delivered to taylor.morgan@example.com. The recipient's mailbox is full. Mail delivery failed permanently.\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-mailer-daemo\",\n                \"name\": \"Mail Delivery Subsystem\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"mailer-daemon@example.com\"\n                }\n              }\n            ],\n            \"archived\": false,\n            \"subject\": \"Undeliverable: Renewal paperwork\"\n          }\n        ]\n      }\n    },\n    {\n      \"ticket\": {\n        \"id\": \"8001211\",\n        \"properties\": {\n          \"subject\": \"Dashboard outage\",\n          \"hs_ticket_priority\": \"MEDIUM\",\n          \"hs_pipeline\": \"0\",\n          \"hs_pipeline_stage\": \"2\",\n          \"frustration_score\": null,\n          \"frustration_last_alert_at\": null,\n          \"frustration_last_alert_tier\": null\n        }\n      },\n      \"company\": {\n        \"id\": \"7001211\",\n        \"properties\": {\n          \"name\": \"Pinecrest Dental\",\n          \"customer_tier\": \"SMB\"\n        }\n      },\n      \"contact\": {\n        \"id\": \"9001211\",\n        \"properties\": {\n          \"firstname\": \"Jamie\",\n          \"lastname\": \"Chen\",\n          \"email\": \"jamie.chen@example.com\"\n        }\n      },\n      \"thread\": {\n        \"id\": \"4001211\",\n        \"threadAssociations\": {\n          \"associatedTicketId\": \"8001211\"\n        },\n        \"messages\": [\n          {\n            \"id\": \"m1211a\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T10:50:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"WHY IS THE DASHBOARD DOWN AGAIN?!?! WE NEED THIS FIXED RIGHT NOW!!! OUR WHOLE TEAM IS BLOCKED!!\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-jamiechen\",\n                \"name\": \"Jamie Chen\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"jamie.chen@example.com\"\n                }\n              }\n            ],\n            \"archived\": false\n          }\n        ]\n      }\n    },\n    {\n      \"ticket\": {\n        \"id\": \"8001212\",\n        \"properties\": {\n          \"subject\": \"Contract question\",\n          \"hs_ticket_priority\": \"LOW\",\n          \"hs_pipeline\": \"0\",\n          \"hs_pipeline_stage\": \"1\",\n          \"frustration_score\": null,\n          \"frustration_last_alert_at\": null,\n          \"frustration_last_alert_tier\": null\n        }\n      },\n      \"company\": {\n        \"id\": \"7001212\",\n        \"properties\": {\n          \"name\": \"Orion Data\",\n          \"customer_tier\": \"Enterprise\"\n        }\n      },\n      \"contact\": {\n        \"id\": \"9001212\",\n        \"properties\": {\n          \"firstname\": \"Drew\",\n          \"lastname\": \"Ellis\",\n          \"email\": \"drew.ellis@example.com\"\n        }\n      },\n      \"thread\": {\n        \"id\": \"4001212\",\n        \"threadAssociations\": {\n          \"associatedTicketId\": \"8001212\"\n        },\n        \"messages\": [\n          {\n            \"id\": \"m1212a\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T10:55:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Forwarding internally: please escalate, the customer is threatening to cancel.\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-accountmanag\",\n                \"name\": \"Account Manager\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"account.manager@company.example\"\n                }\n              }\n            ],\n            \"archived\": false\n          }\n        ]\n      }\n    },\n    {\n      \"ticket\": {\n        \"id\": \"8001213\",\n        \"properties\": {\n          \"subject\": \"Webhook retries\",\n          \"hs_ticket_priority\": \"MEDIUM\",\n          \"hs_pipeline\": \"0\",\n          \"hs_pipeline_stage\": \"2\",\n          \"frustration_score\": \"10\",\n          \"frustration_last_alert_at\": null,\n          \"frustration_last_alert_tier\": null\n        }\n      },\n      \"company\": {\n        \"id\": \"7001213\",\n        \"properties\": {\n          \"name\": \"Tokyo Robotics\",\n          \"customer_tier\": \"Mid-Market\"\n        }\n      },\n      \"contact\": {\n        \"id\": \"9001213\",\n        \"properties\": {\n          \"firstname\": \"Kenji\",\n          \"lastname\": \"Sato\",\n          \"email\": \"kenji.sato@example.com\"\n        }\n      },\n      \"thread\": {\n        \"id\": \"4001213\",\n        \"threadAssociations\": {\n          \"associatedTicketId\": \"8001213\"\n        },\n        \"messages\": [\n          {\n            \"id\": \"m1213a\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T08:00:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Webhooks are retrying twice for the same event, can you check?\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-kenjisato\",\n                \"name\": \"Kenji Sato\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"kenji.sato@example.com\"\n                }\n              }\n            ],\n            \"archived\": false\n          },\n          {\n            \"id\": \"m1213b\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T08:40:00.000Z\",\n            \"direction\": \"OUTGOING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Confirmed, fix is scheduled for this week.\",\n            \"senders\": [\n              {\n                \"actorId\": \"A-agentone\",\n                \"name\": \"Support Agent\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"agent.one@company.example\"\n                }\n              }\n            ],\n            \"archived\": false\n          },\n          {\n            \"id\": \"m1213c\",\n            \"type\": \"MESSAGE\",\n            \"createdAt\": \"2026-11-16T11:00:00.000Z\",\n            \"direction\": \"INCOMING\",\n            \"channelId\": \"1002\",\n            \"text\": \"Honestly getting frustrated now. This was supposed to be fixed last week and it is still not working.\",\n            \"senders\": [\n              {\n                \"actorId\": \"V-kenjisato\",\n                \"name\": \"Kenji Sato\",\n                \"deliveryIdentifier\": {\n                  \"type\": \"HS_EMAIL_ADDRESS\",\n                  \"value\": \"kenji.sato@example.com\"\n                }\n              }\n            ],\n            \"archived\": false\n          }\n        ]\n      }\n    }\n  ]\n};\nlet only = null;\ntry { if ($('Parse & Verify Webhook Events').isExecuted) { const ids = $('Parse & Verify Webhook Events').first().json.items.map((i) => i.ticketId).filter(Boolean); if (ids.length) only = new Set(ids); } } catch (e) { only = null; }\nconst tickets = FIXTURE.tickets.filter((t) => !only || only.has(t.ticket.id)).slice(0, cfg.maxTicketsPerRun).map((t) => {\n  const props = { ...t.ticket.properties };\n  if (t._relative && Number.isFinite(t._relative.lastAlertHoursAgo)) props[cfg.lastAlertProperty] = new Date(Date.now() - t._relative.lastAlertHoursAgo * 3600000).toISOString();\n  if (cfg.lastAlertProperty !== 'frustration_last_alert_at') delete props.frustration_last_alert_at;\n  return {\n    ticketId: t.ticket.id, threadId: t.thread.id, eventMessageId: null,\n    ticket: { id: t.ticket.id, properties: props },\n    company: { id: t.company.id, name: t.company.properties.name, tier: t.company.properties[cfg.companyTierProperty] ?? t.company.properties.customer_tier ?? null },\n    contact: { id: t.contact.id, name: `${t.contact.properties.firstname} ${t.contact.properties.lastname}`, email: t.contact.properties.email },\n    messages: t.thread.messages,\n  };\n});\nreturn [{ json: { source: 'fixture', sinceIso: null, tickets } }];\n"
+      },
+      "id": "aaae7f82-ad78-57e8-a43c-1915e83f251b",
+      "name": "Mock Ticket Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        20
+      ],
+      "notes": "sample-payloads/hubspot-ticket-replies.json.",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "da8e02d2-82a5-55c0-ac63-8b7980050195",
+              "leftValue": "={{ $('Parse & Verify Webhook Events').isExecuted }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cc268405-10b4-5226-bb3e-1029933567bf",
+      "name": "Webhook Items?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config & Safety Gate').first().json.config.hubspotBaseUrl }}/crm/v3/objects/tickets/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.HUBSPOT_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ filterGroups: [{ filters: [{ propertyName: $('Config & Safety Gate').first().json.config.pollDateProperty || 'hs_lastmodifieddate', operator: 'GTE', value: String(Date.now() - $('Config & Safety Gate').first().json.config.pollLookbackMinutes * 60000) }].concat($('Config & Safety Gate').first().json.config.closedStageIds.length ? [{ propertyName: 'hs_pipeline_stage', operator: 'NOT_IN', values: $('Config & Safety Gate').first().json.config.closedStageIds }] : []) }], sorts: [{ propertyName: $('Config & Safety Gate').first().json.config.pollDateProperty || 'hs_lastmodifieddate', direction: 'DESCENDING' }], properties: ['hs_object_id'], limit: Math.min(100, $('Config & Safety Gate').first().json.config.maxTicketsPerRun) }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "4c92764c-7820-5707-a6b3-fe1e89ffe97d",
+      "name": "HubSpot: Search Recent Tickets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        400
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "notes": "Polling fallback. Scope: crm.objects.tickets.read.",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Build Work Items\n// One item per ticket/thread to inspect, from the webhook parser or from the\n// polling search (tickets modified within POLL_LOOKBACK_MINUTES).\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nlet items = [];\nlet source = 'poll';\nlet sinceIso = null;\nif ($('Parse & Verify Webhook Events').isExecuted) {\n  source = 'webhook';\n  items = $('Parse & Verify Webhook Events').first().json.items;\n} else {\n  const pages = $('HubSpot: Search Recent Tickets').all().map((i) => i.json);\n  if (pages.length === 1 && pages[0].error) throw new Error(`HubSpot ticket search failed: ${JSON.stringify(pages[0].error).slice(0, 300)}`);\n  const ids = [...new Set(pages.flatMap((p) => (p.results || []).map((r) => String(r.id))))];\n  items = ids.slice(0, cfg.maxTicketsPerRun).map((ticketId) => ({ ticketId, threadId: null, messageId: null }));\n  sinceIso = new Date(Date.now() - cfg.pollLookbackMinutes * 60000).toISOString();\n}\nif (!items.length) return [{ json: { empty: true, source, sinceIso } }];\nreturn items.map((it) => ({ json: { ...it, source, sinceIso } }));\n"
+      },
+      "id": "f0efdf35-c740-552d-a11f-67524f07ef25",
+      "name": "Build Work Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "ec74b8b0-e990-5f20-badf-dc51212b8792",
+              "leftValue": "={{ $json.empty !== true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5d027884-6987-54b7-bebe-d55107efdf03",
+      "name": "Has Work Items?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config & Safety Gate').first().json.config.hubspotBaseUrl + '/conversations/v3/conversations/threads' + ($json.threadId ? '/' + $json.threadId + '?association=TICKET' : '?associatedTicketId=' + $json.ticketId + '&association=TICKET') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.HUBSPOT_ACCESS_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 150
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "734b3501-b374-5b28-aeeb-15e35287b366",
+      "name": "HubSpot: Find Thread",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        240
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "notes": "Thread by ID, or threads by associatedTicketId. Scope: conversations.read.",
+      "notesInFlow": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Resolve Thread & Ticket\n// Joins work items with the thread lookups (index-aligned). For a ticket, the\n// most recently active associated thread is used; for a thread, its ticket\n// comes from threadAssociations.associatedTicketId. Items without both are\n// reported and dropped.\n// ─────────────────────────────────────────────────────────────────────────────\nconst work = $('Build Work Items').all();\nconst resp = $input.all();\nif (resp.length !== work.length) throw new Error(`Thread lookup mismatch: ${work.length} items vs ${resp.length} responses. Unpin \"HubSpot: Find Thread\" or align its items.`);\nconst out = []; const dropped = [];\nwork.forEach((w, i) => {\n  const r = resp[i].json || {};\n  if (r.error) { dropped.push({ ticketId: w.json.ticketId, threadId: w.json.threadId, reason: 'thread_lookup_failed' }); return; }\n  const threads = Array.isArray(r.results) ? r.results : (r.id ? [r] : []);\n  const th = threads.sort((a, b) => String(b.latestMessageTimestamp || b.createdAt || '').localeCompare(String(a.latestMessageTimestamp || a.createdAt || '')))[0];\n  const threadId = w.json.threadId || (th ? String(th.id) : null);\n  const ticketId = w.json.ticketId || th?.threadAssociations?.associatedTicketId || null;\n  if (!threadId || !ticketId) { dropped.push({ ticketId: w.json.ticketId, threadId: w.json.threadId, reason: !threadId ? 'no_conversation_thread' : 'thread_without_ticket' }); return; }\n  out.push({ json: { ticketId: String(ticketId), threadId: String(threadId), messageId: w.json.messageId || null, source: w.json.source, sinceIso: w.json.sinceIso, dropped } });\n});\nif (!out.length) return [{ json: { empty: true, dropped, source: work[0].json.source, sinceIso: work[0].json.sinceIso } }];\nreturn out.map((o) => ({ json: { ...o.json, dropped } }));\n"
+      },
+      "id": "3c98fa47-4368-5b24-87a3-1d01896e2e54",
+      "name": "Resolve Thread & Ticket",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "d50eaaf2-9543-5d33-a517-7cb421096388",
+              "leftValue": "={{ $json.empty !== true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8bc3230d-5faf-5d52-b958-808b5af411ea",
+      "name": "Has Threads?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config & Safety Gate').first().json.config.hubspotBaseUrl }}/conversations/v3/conversations/threads/{{ $json.threadId }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.HUBSPOT_ACCESS_TOKEN }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 150
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "2538e8c1-46ef-56b5-8fd1-220c2d778876",
+      "name": "HubSpot: Get Thread Messages",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        180
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "notes": "Up to 100 messages per thread. Scope: conversations.read.",
+      "notesInFlow": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Collect Messages & Build Reads\n// Joins thread messages to their ticket (index-aligned) and prepares one batch\n// read each for tickets and ticket→company / ticket→contact associations.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst items = $('Resolve Thread & Ticket').all();\nconst resp = $input.all();\nif (resp.length !== items.length) throw new Error(`Message fetch mismatch: ${items.length} threads vs ${resp.length} responses. Unpin \"HubSpot: Get Thread Messages\" or align its items.`);\nconst work = items.map((it, i) => {\n  const r = resp[i].json || {};\n  return { ticketId: it.json.ticketId, threadId: it.json.threadId, eventMessageId: it.json.messageId, messages: Array.isArray(r.results) ? r.results : [], messageError: r.error ? 'messages_fetch_failed' : null, truncated: Boolean(r.paging?.next) };\n});\nconst ids = [...new Set(work.map((w) => w.ticketId))];\nconst inputs = (ids.length ? ids : ['0']).map((id) => ({ id }));\nconst props = [...new Set(['subject', 'hs_pipeline', 'hs_pipeline_stage', 'hs_ticket_priority', 'hubspot_owner_id', cfg.scoreProperty, cfg.lastAlertProperty, cfg.lastAlertTierProperty, cfg.flagProperty].filter(Boolean))];\nreturn [{ json: { work, dropped: items[0].json.dropped || [], source: items[0].json.source, sinceIso: items[0].json.sinceIso,\n  ticketBody: { properties: props, inputs }, assocBody: { inputs } } }];\n"
+      },
+      "id": "a797c5b0-2e87-5710-89d1-a7f8e5ca662b",
+      "name": "Collect Messages & Build Reads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config & Safety Gate').first().json.config.hubspotBaseUrl }}/crm/v3/objects/tickets/batch/read",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.HUBSPOT_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ticketBody) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "2ff9cf13-b2f1-586c-b32f-ae7b5a11765a",
+      "name": "HubSpot: Batch Read Tickets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2440,
+        180
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "notes": "Scope: crm.objects.tickets.read.",
+      "notesInFlow": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config & Safety Gate').first().json.config.hubspotBaseUrl }}/crm/v4/associations/tickets/companies/batch/read",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.HUBSPOT_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Collect Messages & Build Reads').first().json.assocBody) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "7214d869-02ee-5f2f-be55-c9eab4426c58",
+      "name": "HubSpot: Ticket → Company Associations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2660,
+        180
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "notes": "",
+      "notesInFlow": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config & Safety Gate').first().json.config.hubspotBaseUrl }}/crm/v4/associations/tickets/contacts/batch/read",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.HUBSPOT_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Collect Messages & Build Reads').first().json.assocBody) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "19ccaf78-9bf9-520b-a833-dfc89dc58a93",
+      "name": "HubSpot: Ticket → Contact Associations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2880,
+        180
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "notes": "",
+      "notesInFlow": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Build Company & Contact Reads\n// Primary associated company and contact per ticket → one batch read each.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst pick = (resp) => {\n  const map = {};\n  for (const r of resp.results || []) {\n    const to = r.to || [];\n    const primary = to.find((t) => (t.associationTypes || []).some((a) => /primary/i.test(String(a.label || '')))) || to[0];\n    if (primary) map[String(r.from?.id)] = String(primary.toObjectId);\n  }\n  return map;\n};\nconst comp = pick($('HubSpot: Ticket → Company Associations').first().json || {});\nconst cont = pick($input.first().json || {});\nconst cIds = [...new Set(Object.values(comp))];\nconst pIds = [...new Set(Object.values(cont))];\nreturn [{ json: { companyByTicket: comp, contactByTicket: cont,\n  companyBody: { properties: [...new Set(['name', 'domain', cfg.companyTierProperty].filter(Boolean))], inputs: (cIds.length ? cIds : ['0']).map((id) => ({ id })) },\n  contactBody: { properties: ['firstname', 'lastname', 'email', 'jobtitle'], inputs: (pIds.length ? pIds : ['0']).map((id) => ({ id })) } } }];\n"
+      },
+      "id": "9c181807-ed2f-5d11-8871-56ae3fad4e02",
+      "name": "Build Company & Contact Reads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3100,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config & Safety Gate').first().json.config.hubspotBaseUrl }}/crm/v3/objects/companies/batch/read",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.HUBSPOT_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.companyBody) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "48e38607-f7b8-52c5-9b7b-54857add0222",
+      "name": "HubSpot: Batch Read Companies",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3320,
+        180
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "notes": "Name + tier. Scope: crm.objects.companies.read.",
+      "notesInFlow": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config & Safety Gate').first().json.config.hubspotBaseUrl }}/crm/v3/objects/contacts/batch/read",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.HUBSPOT_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Build Company & Contact Reads').first().json.contactBody) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "febb5206-dd54-5768-9599-172e7d7fe4a6",
+      "name": "HubSpot: Batch Read Contacts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3540,
+        180
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "notes": "Scope: crm.objects.contacts.read.",
+      "notesInFlow": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Assemble Ticket Context\n// Ticket properties + company (name, tier) + primary contact + thread\n// messages, in the same shape as \"Mock Ticket Context\". Failed reads leave the\n// context empty instead of stopping the run.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst base = $('Collect Messages & Build Reads').first().json;\nconst maps = $('Build Company & Contact Reads').first().json;\nconst byId = (resp) => new Map((resp.results || []).map((r) => [String(r.id), r]));\nconst tickets = byId($('HubSpot: Batch Read Tickets').first().json || {});\nconst companies = byId($('HubSpot: Batch Read Companies').first().json || {});\nconst contacts = byId($input.first().json || {});\nconst out = base.work.map((w) => {\n  const t = tickets.get(w.ticketId);\n  const c = companies.get(maps.companyByTicket[w.ticketId] || '');\n  const p = contacts.get(maps.contactByTicket[w.ticketId] || '');\n  return {\n    ticketId: w.ticketId, threadId: w.threadId, eventMessageId: w.eventMessageId, messageError: w.messageError, truncated: w.truncated,\n    ticket: { id: w.ticketId, properties: t?.properties || {} },\n    company: c ? { id: String(c.id), name: c.properties?.name || null, tier: c.properties?.[cfg.companyTierProperty] ?? null } : { id: null, name: null, tier: null },\n    contact: p ? { id: String(p.id), name: [p.properties?.firstname, p.properties?.lastname].filter(Boolean).join(' ') || null, email: p.properties?.email || null } : { id: null, name: null, email: null },\n    messages: w.messages,\n  };\n});\nreturn [{ json: { source: base.source, sinceIso: base.sinceIso, dropped: base.dropped, tickets: out } }];\n"
+      },
+      "id": "1967a3dc-641e-5629-b8f8-69455259f6ba",
+      "name": "Assemble Ticket Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3760,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Sentiment Regression & Frustration Scoring\n// Per ticket:\n//  1. Picks the newest GENUINE customer message: type MESSAGE (internal\n//     COMMENTs are agent notes), direction INCOMING, not from an internal\n//     domain, not an out-of-office / auto-reply / bounce, and newer than the\n//     poll window (or the message named by the webhook event).\n//  2. Scores it 0–100 from weighted trigger categories (negation-aware),\n//     urgency typography (exclamation runs, ALL-CAPS ratio), consecutive\n//     unanswered follow-ups and a positive-language dampener.\n//  3. Compares with the baseline (ticket property FRUSTRATION_SCORE_PROPERTY,\n//     else the earlier customer messages in the thread) → sentiment_delta,\n//     is_regression.\n//  4. Assigns severity_tier and should_escalate (before cooldown).\n// Message text never leaves this node unredacted: previews mask emails,\n// phone numbers and long digit runs.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst { tickets, source, sinceIso } = $input.first().json;\nconst since = sinceIso ? Date.parse(sinceIso) : null;\n\n// ── Trigger dictionary (category → weight, optional tier floor, phrases) ──\nconst CATEGORIES = {\n  legal: { weight: 45, floor: 'critical', phrases: ['lawyer', 'lawyers', 'attorney', 'legal action', 're:(?:involve|involving|contact|contacting|forward(?:ing)?(?: this)? to|hand(?:ing)?(?: this)?(?: over)? to|escalat\\\\w*(?: this)? to|refer(?:ring)?(?: this)? to) (?:our )?legal\\\\b', 'sue you', 'lawsuit', 'take legal', 'small claims', 'chargeback', 'report you to', 'regulator', 'ombudsman', 'breach of contract'] },\n  // \"cancel\" counts only with an account/contract object or as stated intent,\n  // so \"how do I cancel a scheduled report?\" does not trigger.\n  churn: { weight: 35, floor: 'high', phrases: ['re:cancel(?:l?ing|led|lation)?\\\\b(?=[^.!?]{0,40}\\\\b(?:subscription|account|contract|plan|service|licen[cs]e|renewal|membership|with you)\\\\b)', \"re:\\\\b(?:we|i)(?:'ll| will| are going to|'re going to| am going to|'m going to| want to| plan to| intend to| are about to|'re about to)\\\\s+(?:cancel|leave|churn)\\\\b\", 'terminate the contract', 'terminate our contract', 'not renewing', \"won't renew\", 'will not renew', 'switching to', 'switch to another', 'moving to a competitor', 'another vendor', 'another provider', 'end our subscription', 'close our account'] },\n  refund: { weight: 18, phrases: ['refund', 'money back', 'credit for the downtime', 'compensation'] },\n  escalation: { weight: 22, phrases: ['escalate', 'escalated', 'escalation', 'manager', 'supervisor', 'someone senior', 'your ceo', 'your boss', 'head of support', 'executive'] },\n  frustration: { weight: 20, phrases: ['unacceptable', 'ridiculous', 'terrible support', 'terrible service', 'awful', 'worst', 'useless', 'fed up', 'furious', 'disappointed', 'frustrated', 'frustrating', 'angry', 'appalling', 'disgraceful', 'joke', 'waste of time', 'not good enough'] },\n  repetition: { weight: 16, phrases: ['still waiting', 'still not', 'broken again', 'down again', 'failed again', 'third time', 'fourth time', 'again and again', 'how many times', 'keep asking', 'nobody has responded', 'no one has responded', 'no response', 'no reply', 'for the last time', 'yet again', 'supposed to be fixed'] },\n  urgency: { weight: 12, phrases: ['urgent', 'urgently', 'asap', 'immediately', 'right now', 'production down', 'outage', 'business critical', 'losing money', 'losing customers', 'whole team is blocked'] },\n};\nfor (const [k, w] of Object.entries(cfg.keywordWeights || {})) if (CATEGORIES[k] && Number.isFinite(Number(w))) CATEGORIES[k].weight = Math.max(0, Math.min(100, Number(w)));\nfor (const extra of cfg.extraKeywords || []) { const [phrase, cat] = extra.split(':').map((x) => x.trim().toLowerCase()); if (phrase && CATEGORIES[cat]) CATEGORIES[cat].phrases.push(phrase); }\nconst POSITIVE = ['thank you', 'thanks', 'appreciate', 'resolved', 'fixed it', 'works now', 'working now', 'great job', 'perfect', 'all good', 'brilliant', 'awesome'];\nconst COMPLAINT_NEG = /\\b(isn't|is not|not|doesn't|does not|don't|haven't|hasn't|wasn't|aren't|still not)\\s+(been\\s+)?(fixed|working|resolved|sorted|done|answered|responded|back|improved|heard|addressed)\\b/;\nconst NEGATORS = /\\b(no|not|never|don't|dont|do not|won't|wont|isn't|aren't|without|no need to|nothing to)\\b/;\nconst AUTO_SUBJECT = /\\b(automatic reply|auto[- ]?reply|autoreply|out of (the )?office|ooo|undeliverable|delivery status notification|mail delivery (failed|subsystem)|returned mail|delivery failure)\\b/i;\nconst AUTO_BODY = /\\b(i am|i'm) (currently )?(out of (the )?office|away from (the )?office|on (annual |parental )?leave|on vacation|travell?ing with limited)|automatic reply|this is an auto(mated|matic)[- ]?(reply|response|message)|delivery status notification|could not be delivered|mail delivery failed|mailbox (is )?full|recipient address rejected/i;\nconst AUTO_SENDER = /^(mailer-daemon|postmaster|no-?reply|do-?not-?reply|bounce[s]?|notifications?)@/i;\nconst RANK = { low: 0, moderate: 1, high: 2, critical: 3 };\n\nconst esc = (s) => s.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\nconst senderEmail = (m) => String(m.senders?.[0]?.deliveryIdentifier?.value || m.senders?.[0]?.email || '').toLowerCase();\nconst isInternal = (email) => { const dom = email.split('@')[1] || ''; return cfg.internalDomains.some((d) => dom === d || dom.endsWith(`.${d}`)); };\nfunction classify(m) {\n  if (String(m.type || 'MESSAGE').toUpperCase() !== 'MESSAGE') return 'internal_note';\n  if (String(m.direction || '').toUpperCase() !== 'INCOMING') return 'agent_reply';\n  const email = senderEmail(m);\n  if (AUTO_SENDER.test(email)) return 'bounce_or_system';\n  if (AUTO_SUBJECT.test(String(m.subject || '')) || AUTO_BODY.test(String(m.text || ''))) return 'auto_reply';\n  if (email && isInternal(email)) return 'internal_sender';\n  if (!String(m.text || '').trim()) return 'empty';\n  return 'customer';\n}\n\nfunction scoreText(text, followUps) {\n  const raw = String(text || '');\n  const t = raw.toLowerCase().replace(/[’]/g, \"'\");\n  const matched = [];\n  let score = 0;\n  const cats = {};\n  for (const [cat, def] of Object.entries(CATEGORIES)) {\n    for (const ph of def.phrases) {\n      const isRe = ph.startsWith('re:');\n      const re = isRe ? new RegExp(`(^|[^a-z])${ph.slice(3)}`, 'g') : new RegExp(`(^|[^a-z])${esc(ph)}([^a-z]|$)`, 'g');\n      const label = isRe ? (ph.includes('legal') ? 'involving legal' : ph.includes('(?:we|i)') ? 'intends to cancel/leave' : 'cancel …') : ph;\n      let m;\n      while ((m = re.exec(t))) {\n        // Negation: one of the three words directly before the phrase, same clause.\n        const clause = (t.slice(Math.max(0, m.index - 60), m.index + m[1].length).split(/[.!?;,]/).pop() || '');\n        // Complaint negations (\"isn't fixed\", \"not working\") don't negate the threat,\n        // and intent patterns (\"we will cancel\") carry their own subject and verb.\n        const last3 = clause.trim().split(/\\s+/).slice(-3).join(' ');\n        const negated = !ph.includes('(?:we|i)') && NEGATORS.test(last3) && !COMPLAINT_NEG.test(clause);\n        if (negated) { matched.push({ category: cat, phrase: label, negated: true }); continue; }\n        if (!cats[cat]) { cats[cat] = 0; score += def.weight; }\n        cats[cat] += 1;\n        if (cats[cat] > 1 && cats[cat] <= 3) score += 3; // extra distinct hits in a category\n        matched.push({ category: cat, phrase: label, negated: false });\n        break;\n      }\n    }\n  }\n  // Typography\n  const excl = (raw.match(/!/g) || []).length;\n  const runs = (raw.match(/[!?]{2,}/g) || []).length;\n  const typo = Math.min(14, Math.max(0, excl - 1) * 2 + runs * 2);\n  if (typo) { score += typo; matched.push({ category: 'urgency_typography', phrase: `${excl}× \"!\"${runs ? `, ${runs} run(s)` : ''}`, negated: false }); }\n  const letters = raw.replace(/[^A-Za-z]/g, '');\n  const words = raw.split(/\\s+/).filter((w) => /[A-Za-z]{3,}/.test(w));\n  const capsWords = words.filter((w) => { const l = w.replace(/[^A-Za-z]/g, ''); return l.length >= 3 && l === l.toUpperCase(); });\n  const capsRatio = words.length ? capsWords.length / words.length : 0;\n  if (letters.length >= 20 && capsRatio >= 0.5) { score += 16; matched.push({ category: 'urgency_typography', phrase: `ALL-CAPS ${Math.round(capsRatio * 100)}%`, negated: false }); }\n  else if (letters.length >= 20 && capsRatio >= 0.25) { score += 6; matched.push({ category: 'urgency_typography', phrase: `caps ${Math.round(capsRatio * 100)}%`, negated: false }); }\n  // Consecutive unanswered customer messages\n  if (followUps >= 2) { const add = Math.min(18, (followUps - 1) * 7); score += add; matched.push({ category: 'repeated_follow_up', phrase: `${followUps} customer messages without an agent reply`, negated: false }); }\n  // Positive dampener (never offsets legal/churn signals)\n  const positive = POSITIVE.filter((p) => new RegExp(`(^|[^a-z])${esc(p)}([^a-z]|$)`).test(t));\n  if (positive.length && !cats.legal && !cats.churn) { score -= 15 + 5 * Math.min(2, positive.length - 1); matched.push({ category: 'positive', phrase: positive.slice(0, 3).join(', '), negated: false }); }\n  return { score: Math.max(0, Math.min(100, Math.round(score))), matched, categories: cats, capsRatio: Math.round(capsRatio * 100) / 100, exclamations: excl };\n}\n\nfunction tierOf(s, cats) {\n  if (cats.legal || s >= cfg.criticalThreshold) return 'critical';\n  if (cats.churn || s >= cfg.highThreshold) return 'high';\n  if (s >= cfg.moderateThreshold) return 'moderate';\n  return 'low';\n}\nconst redact = (s) => String(s || '')\n  .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi, '[email]')\n  .replace(/\\+?\\(?\\d[\\d\\s().-]{6,}\\d/g, (m) => (m.replace(/\\D/g, '').length >= 7 ? '[phone]' : m))\n  .replace(/\\b\\d{5,}\\b/g, '[number]')\n  .replace(/\\s+/g, ' ').trim();\n\nconst results = [];\nfor (const tk of tickets) {\n  const msgs = [...(tk.messages || [])].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));\n  const classified = msgs.map((m) => ({ m, cls: classify(m) }));\n  const ignored = classified.filter((x) => x.cls !== 'customer' && x.cls !== 'agent_reply').map((x) => ({ messageId: x.m.id, reason: x.cls }));\n  const customer = classified.filter((x) => x.cls === 'customer');\n  let target = tk.eventMessageId ? customer.find((x) => x.m.id === tk.eventMessageId) : customer[customer.length - 1];\n  const base = { ticketId: tk.ticketId, threadId: tk.threadId, company: tk.company, contact: tk.contact, ticket: tk.ticket, ignoredMessages: ignored };\n  if (!target) { results.push({ ...base, scored: false, skipReason: ignored.length ? `no_genuine_customer_message (${[...new Set(ignored.map((i) => i.reason))].join(', ')})` : 'no_customer_message', should_escalate: false }); continue; }\n  if (since && Date.parse(target.m.createdAt) < since && !tk.eventMessageId) { results.push({ ...base, scored: false, skipReason: 'no_new_customer_message_in_window', should_escalate: false }); continue; }\n  // Consecutive customer messages ending at the target, with no agent reply in between.\n  let followUps = 0;\n  for (let i = classified.indexOf(target); i >= 0; i -= 1) {\n    if (classified[i].cls === 'agent_reply') break;\n    if (classified[i].cls === 'customer') followUps += 1;\n  }\n  const s = scoreText(target.m.text, followUps);\n  // Baseline: stored score, else earlier customer messages (up to 3).\n  const stored = Number(tk.ticket?.properties?.[cfg.scoreProperty]);\n  const prior = customer.filter((x) => x !== target && Date.parse(x.m.createdAt) < Date.parse(target.m.createdAt)).slice(-3).map((x) => scoreText(x.m.text, 0).score);\n  const baseline = Number.isFinite(stored) && tk.ticket?.properties?.[cfg.scoreProperty] !== null && tk.ticket?.properties?.[cfg.scoreProperty] !== '' ? stored : prior.length ? Math.round(prior.reduce((a, b) => a + b, 0) / prior.length) : null;\n  const delta = baseline === null ? null : s.score - baseline;\n  const isRegression = delta !== null && delta >= cfg.regressionDelta && s.score >= cfg.regressionMinScore;\n  const tier = tierOf(s.score, s.categories);\n  const shouldEscalate = RANK[tier] >= RANK[cfg.escalateMinTier] || (isRegression && RANK[tier] >= RANK.moderate);\n  results.push({\n    ...base, scored: true,\n    messageId: target.m.id, messageAt: target.m.createdAt,\n    frustration_score: s.score, severity_tier: tier,\n    matched_triggers: s.matched.filter((x) => !x.negated).map((x) => `${x.category}: ${x.phrase}`),\n    negated_triggers: s.matched.filter((x) => x.negated).map((x) => `${x.category}: ${x.phrase}`),\n    sentiment_baseline: baseline, baseline_source: Number.isFinite(stored) && baseline === stored ? 'ticket_property' : prior.length ? 'thread_history' : 'none',\n    sentiment_delta: delta, is_regression: isRegression, consecutive_follow_ups: followUps,\n    caps_ratio: s.capsRatio, exclamations: s.exclamations,\n    should_escalate: shouldEscalate,\n    preview: (() => { const r = redact(target.m.text); return r.length > cfg.previewChars ? `${r.slice(0, cfg.previewChars - 1)}…` : r; })(),\n  });\n}\nconst counts = { tickets: results.length, scored: results.filter((r) => r.scored).length, skipped: results.filter((r) => !r.scored).length, critical: 0, high: 0, moderate: 0, low: 0, regressions: results.filter((r) => r.is_regression).length, should_escalate: results.filter((r) => r.should_escalate).length };\nfor (const r of results) if (r.scored) counts[r.severity_tier] += 1;\nreturn [{ json: { source, sinceIso: sinceIso || null, counts, results } }];\n"
+      },
+      "id": "ed64fb11-417e-5c1f-b4b3-7bb96fd404db",
+      "name": "Sentiment Regression & Frustration Scoring",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3980,
+        60
+      ],
+      "notes": "Customer-message filter, score 0–100, tier, regression, should_escalate.",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Cooldown & Escalation Gate\n// Suppresses a repeat alert for the same ticket within COOLDOWN_HOURS, using\n// both the ticket property LAST_ALERT_PROPERTY (shared across n8n instances,\n// when written back) and workflow static data (production executions).\n// A higher severity tier than the last alert breaks through the cooldown.\n// Caps alerts per run at MAX_ALERTS_PER_RUN, highest score first.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst sc = $input.first().json;\nconst RANK = { low: 0, moderate: 1, high: 2, critical: 3 };\nlet store = null;\ntry { store = $getWorkflowStaticData('global'); } catch (e) { store = null; }\nconst mem = (store && store.alerts) || {};\nconst now = Date.now();\nconst escalations = []; const suppressed = [];\nfor (const r of sc.results.filter((x) => x.should_escalate).sort((a, b) => b.frustration_score - a.frustration_score)) {\n  const propAt = Date.parse(r.ticket?.properties?.[cfg.lastAlertProperty] || '');\n  const propTier = String(r.ticket?.properties?.[cfg.lastAlertTierProperty] || '').toLowerCase();\n  const m = mem[r.ticketId];\n  const candidates = [Number.isFinite(propAt) ? { at: propAt, tier: propTier || 'high', via: 'ticket_property' } : null, m ? { at: m.at, tier: m.tier, via: 'workflow_memory' } : null].filter(Boolean);\n  const last = candidates.sort((a, b) => b.at - a.at)[0];\n  if (last && now - last.at < cfg.cooldownHours * 3600000) {\n    if (RANK[r.severity_tier] > (RANK[last.tier] ?? 2)) { escalations.push({ ...r, cooldownBypass: `tier rose from ${last.tier} to ${r.severity_tier}` }); continue; }\n    suppressed.push({ ticketId: r.ticketId, tier: r.severity_tier, score: r.frustration_score, reason: `cooldown (${last.via}, alerted ${Math.round((now - last.at) / 60000)} min ago as ${last.tier})` });\n    continue;\n  }\n  escalations.push({ ...r, cooldownBypass: null });\n}\nconst capped = escalations.slice(cfg.maxAlertsPerRun).map((r) => ({ ticketId: r.ticketId, tier: r.severity_tier, score: r.frustration_score, reason: 'over_max_alerts_per_run' }));\nreturn [{ json: { ...sc, escalations: escalations.slice(0, cfg.maxAlertsPerRun), suppressed: [...suppressed, ...capped] } }];\n"
+      },
+      "id": "37acd723-96c2-594e-ae16-62b2f6c60ab1",
+      "name": "Cooldown & Escalation Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4200,
+        60
+      ],
+      "notes": "Per-ticket cooldown (property + memory), tier break-through, per-run cap.",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Build Slack Escalation Alerts\n// One Block Kit message per escalation: tier, ticket, account and tier, score,\n// regression, matched triggers, redacted preview and a HubSpot link built from\n// HUBSPOT_TICKET_URL_TEMPLATE. Contact names appear only with\n// SHOW_CONTACT_NAME=true; emails and phone numbers never appear.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst g = $input.first().json;\nconst ICON = { critical: '🔴', high: '🟠', moderate: '🟡', low: '⚪' };\nconst esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst link = (id) => (cfg.portalId && cfg.ticketUrlTemplate ? cfg.ticketUrlTemplate.replace('{portalId}', cfg.portalId).replace('{ticketId}', id) : null);\nconst alerts = g.escalations.map((r) => {\n  const p = r.ticket?.properties || {};\n  const url = link(r.ticketId);\n  const delta = r.sentiment_delta === null ? 'n/a (no baseline)' : `${r.sentiment_delta > 0 ? '+' : ''}${r.sentiment_delta} vs ${r.sentiment_baseline} (${r.baseline_source.replace('_', ' ')})`;\n  const blocks = [\n    { type: 'header', text: { type: 'plain_text', text: `${ICON[r.severity_tier]} ${r.severity_tier.toUpperCase()} customer frustration · Ticket ${r.ticketId}`.slice(0, 150), emoji: true } },\n    { type: 'section', fields: [\n      { type: 'mrkdwn', text: `*Account*\\n${esc(r.company?.name || 'Unknown company')}` },\n      { type: 'mrkdwn', text: `*Tier*\\n${esc(r.company?.tier || '—')}` },\n      { type: 'mrkdwn', text: `*Frustration score*\\n${r.frustration_score}/100` },\n      { type: 'mrkdwn', text: `*Change*\\n${r.is_regression ? '📉 regression ' : ''}${esc(delta)}` },\n      { type: 'mrkdwn', text: `*Ticket*\\n${esc(p.subject || '—')}` },\n      { type: 'mrkdwn', text: `*Priority / stage*\\n${esc(p.hs_ticket_priority || '—')} / ${esc(p.hs_pipeline_stage || '—')}` },\n    ] },\n    { type: 'section', text: { type: 'mrkdwn', text: `*Triggers*\\n${r.matched_triggers.slice(0, 8).map((t) => `• ${esc(t)}`).join('\\n') || '—'}`.slice(0, 2900) } },\n  ];\n  if (cfg.includePreview) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: `*Latest customer message* (redacted)\\n>${esc(r.preview)}${cfg.showContactName && r.contact?.name ? `\\n— ${esc(r.contact.name)}` : ''}`.slice(0, 2900) } });\n  if (url) blocks.push({ type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Open ticket in HubSpot' }, url, style: r.severity_tier === 'critical' ? 'danger' : 'primary' }] });\n  blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `${r.consecutive_follow_ups > 1 ? `${r.consecutive_follow_ups} unanswered customer messages · ` : ''}${r.cooldownBypass ? `cooldown bypassed: ${esc(r.cooldownBypass)} · ` : ''}message ${esc(r.messageId)} · ${esc(r.messageAt)} · run ${esc(cfg.runId)}`.slice(0, 2900) }] });\n  return { ticketId: r.ticketId, tier: r.severity_tier, body: { text: `${r.severity_tier.toUpperCase()} frustration on ticket ${r.ticketId} (${r.company?.name || 'unknown account'}): score ${r.frustration_score}/100`, blocks } };\n});\nreturn [{ json: { ...g, alerts, slackAllowed: cfg.sendSlackAlerts && alerts.length > 0 } }];\n"
+      },
+      "id": "ec641015-6d88-599b-bffb-d982f0b60f1b",
+      "name": "Build Slack Escalation Alerts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4420,
+        60
+      ],
+      "notes": "Block Kit alerts with redacted preview + HubSpot link.",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "d16d5056-b433-519c-925a-992c0bfd25fa",
+              "leftValue": "={{ $json.slackAllowed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "74bc7baf-88fd-5fa4-a1bb-df893579a0dc",
+      "name": "Slack Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4640,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per Slack alert.\nreturn $('Build Slack Escalation Alerts').first().json.alerts.map((a) => ({ json: a }));\n"
+      },
+      "id": "5b04f68d-e322-5033-ba66-1573aea213f2",
+      "name": "Emit Slack Alerts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4860,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_ESCALATION_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1100
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "0f7c7e53-b325-54f5-b229-16e76623944e",
+      "name": "Slack: Post Escalation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5080,
+        -40
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "notes": "Slack incoming webhook (≈ 1 message/second).",
+      "notesInFlow": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Collect Slack Results\n// Joins Slack responses by index and records sent alerts in workflow static\n// data (production executions) for the cooldown.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst alerts = $('Emit Slack Alerts').all();\nconst resp = $input.all();\nif (resp.length !== alerts.length) throw new Error(`Slack result mismatch: ${alerts.length} alerts vs ${resp.length} responses.`);\nconst results = alerts.map((a, i) => ({ ticketId: a.json.ticketId, tier: a.json.tier, ok: !resp[i].json.error, error: resp[i].json.error ? String(resp[i].json.error.message || resp[i].json.error).slice(0, 200) : null }));\nlet store = null;\ntry { store = $getWorkflowStaticData('global'); } catch (e) { store = null; }\nif (store && cfg.executionMode === 'production') {\n  store.alerts = store.alerts || {};\n  for (const r of results.filter((x) => x.ok)) store.alerts[r.ticketId] = { at: Date.now(), tier: r.tier };\n  for (const [k, v] of Object.entries(store.alerts)) if (Date.now() - v.at > 7 * 86400000) delete store.alerts[k];\n}\nreturn [{ json: { results, sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length } }];\n"
+      },
+      "id": "be0447ab-91dc-5ae8-a58a-2aa543db0200",
+      "name": "Collect Slack Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5300,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Build HubSpot Ticket Updates\n// For every scored ticket: FRUSTRATION_SCORE_PROPERTY (the regression baseline\n// for the next reply). For escalations that fired (Slack sent, or Slack not\n// enabled): FLAG_PROPERTY = true, LAST_ALERT_PROPERTY / LAST_ALERT_TIER_PROPERTY,\n// and with RAISE_PRIORITY=true hs_ticket_priority = HIGH for critical/high\n// (never lowered). Batches of ≤ 100.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst s = $input.first().json;\nconst gate = $('Build Slack Escalation Alerts').first().json;\nlet slack = null;\ntry { slack = $('Collect Slack Results').isExecuted ? $('Collect Slack Results').first().json : null; } catch (e) { slack = null; }\nconst sentOk = new Set(slack ? slack.results.filter((r) => r.ok).map((r) => r.ticketId) : []);\nconst fired = new Set(gate.escalations.filter((e) => (cfg.sendSlackAlerts ? sentOk.has(e.ticketId) : true)).map((e) => e.ticketId));\nconst PRIO = { LOW: 0, MEDIUM: 1, HIGH: 2, URGENT: 3 };\nconst now = new Date().toISOString();\nconst updates = [];\nfor (const r of gate.results.filter((x) => x.scored)) {\n  const props = {};\n  if (cfg.scoreProperty) props[cfg.scoreProperty] = String(r.frustration_score);\n  if (fired.has(r.ticketId)) {\n    if (cfg.flagProperty) props[cfg.flagProperty] = 'true';\n    if (cfg.lastAlertProperty) props[cfg.lastAlertProperty] = now;\n    if (cfg.lastAlertTierProperty) props[cfg.lastAlertTierProperty] = r.severity_tier;\n    const cur = String(r.ticket?.properties?.hs_ticket_priority || '').toUpperCase();\n    if (cfg.raisePriority && ['critical', 'high'].includes(r.severity_tier) && (PRIO[cur] ?? -1) < PRIO.HIGH) props.hs_ticket_priority = 'HIGH';\n  }\n  if (Object.keys(props).length) updates.push({ id: r.ticketId, properties: props });\n}\nconst batches = [];\nfor (let i = 0; i < updates.length; i += 100) batches.push({ batchNo: batches.length + 1, body: { inputs: updates.slice(i, i + 100) } });\nreturn [{ json: { updates, batches, fired: [...fired], writeAllowed: cfg.writeToHubspot && batches.length > 0 } }];\n"
+      },
+      "id": "5fbc6e34-c956-5a74-976e-49fd16fef73f",
+      "name": "Build HubSpot Ticket Updates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5520,
+        60
+      ],
+      "notes": "Score for all; flag, last alert, priority for fired escalations.",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "5d7f5b1f-40c6-5ef1-858f-7ac346047e1e",
+              "leftValue": "={{ $json.writeAllowed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "410acf7a-97a4-5ae7-9de1-8ff4b1625af6",
+      "name": "Write Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        5740,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per batch/update request.\nreturn $('Build HubSpot Ticket Updates').first().json.batches.map((b) => ({ json: b }));\n"
+      },
+      "id": "a8b4fad5-9216-549b-9cff-5a1c29fd635f",
+      "name": "Emit Flag Batches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5960,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config & Safety Gate').first().json.config.hubspotBaseUrl }}/crm/v3/objects/tickets/batch/update",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.HUBSPOT_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "8b7e964f-c95f-59f5-90d5-17efcfb24c0a",
+      "name": "HubSpot: Flag Tickets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6180,
+        -40
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "notes": "Scope: crm.objects.tickets.write.",
+      "notesInFlow": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Build Run Summary\n// One JSON document for ALERT_WEBHOOK_URL (incident tooling, data warehouse):\n// counts, escalated / suppressed ticket IDs, delivery results. No message text.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst g = $('Build Slack Escalation Alerts').first().json;\nlet sl = null; try { sl = $('Collect Slack Results').isExecuted ? $('Collect Slack Results').first().json : null; } catch (e) { sl = null; }\nconst body = {\n  event: 'hubspot.ticket_frustration.run', runId: cfg.runId, generatedAt: new Date().toISOString(),\n  mode: cfg.sandboxMode ? 'sandbox' : cfg.sendSlackAlerts ? 'live' : 'dry_run', source: g.source, counts: g.counts,\n  escalations: g.escalations.map((e) => ({ ticket_id: e.ticketId, tier: e.severity_tier, score: e.frustration_score, regression: e.is_regression, delta: e.sentiment_delta, company: e.company?.name || null, triggers: e.matched_triggers.map((t) => t.split(':')[0]) })),\n  suppressed: g.suppressed, slack: sl ? { sent: sl.sent, failed: sl.failed } : null,\n};\nconst worth = g.escalations.length > 0 || (sl && sl.failed > 0) || cfg.notifyOnEveryRun;\nreturn [{ json: { body, sendAllowed: cfg.webhookEnabled && worth } }];\n"
+      },
+      "id": "8a03e9a7-f63c-5e4b-9138-fea0cf0a14c5",
+      "name": "Build Run Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6400,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "60e8bb28-3464-5794-b8d9-25e3247e5308",
+              "leftValue": "={{ $json.sendAllowed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "def3e3be-1b37-5439-9b2e-6eb8c8c6ae7e",
+      "name": "Summary Webhook?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        6620,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ALERT_WEBHOOK_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.ALERT_WEBHOOK_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "cbe3812b-5a53-55b7-95a6-7d8dc826583d",
+      "name": "Webhook: Post Run Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6840,
+        -40
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "notes": "Generic JSON webhook.",
+      "notesInFlow": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// Execution Summary & Audit\n// Final record on every path: per-ticket scores, tiers, triggers, skips,\n// suppressions, Slack and HubSpot results. Message previews are excluded;\n// only IDs, scores and trigger labels are kept. No secrets.\n// ─────────────────────────────────────────────────────────────────────────────\nconst cfg = $('Config & Safety Gate').first().json.config;\nconst one = (n) => { try { return $(n).isExecuted ? $(n).first().json : null; } catch (e) { return null; } };\nconst all = (n) => { try { return $(n).isExecuted ? $(n).all().map((i) => i.json) : []; } catch (e) { return []; } };\nconst wh = one('Parse & Verify Webhook Events');\nconst res = one('Resolve Thread & Ticket');\nconst g = one('Build Slack Escalation Alerts');\nconst sl = one('Collect Slack Results');\nconst fl = one('Build HubSpot Ticket Updates');\nconst hu = all('HubSpot: Flag Tickets');\nconst sum = all('Webhook: Post Run Summary');\nconst sc = g || one('Sentiment Regression & Frustration Scoring');\n\nlet outcome = 'no_tickets';\nif (sc) {\n  if (!sc.counts.scored) outcome = 'no_customer_messages_to_score';\n  else if (!g || !g.escalations.length) outcome = sc.counts.should_escalate ? 'escalations_suppressed' : 'no_escalations';\n  else if (cfg.sandboxMode) outcome = 'escalations_found_sandbox';\n  else if (!cfg.sendSlackAlerts) outcome = cfg.dryRun ? 'escalations_found_dry_run' : 'escalations_found_slack_disabled';\n  else if (sl && sl.failed) outcome = sl.sent ? 'escalated_partially' : 'escalation_failed';\n  else outcome = 'escalated';\n}\nconst status = (list) => (!list.length ? 'not_sent' : list.some((x) => x.error) ? 'failed' : 'sent');\nreturn [{ json: {\n  workflow: 'n8n-hubspot-support-ticket-frustration-slack-escalation',\n  runId: cfg.runId, executionMode: cfg.executionMode, finishedAt: new Date().toISOString(), outcome,\n  safety: { sandboxMode: cfg.sandboxMode, dryRun: cfg.dryRun, sendSlackAlerts: cfg.sendSlackAlerts, writeToHubspot: cfg.writeToHubspot },\n  thresholds: { escalateMinTier: cfg.escalateMinTier, critical: cfg.criticalThreshold, high: cfg.highThreshold, moderate: cfg.moderateThreshold, regressionDelta: cfg.regressionDelta, cooldownHours: cfg.cooldownHours },\n  source: sc ? sc.source : (wh ? 'webhook' : null),\n  webhook: wh ? { signature: wh.signature, received: wh.received, items: wh.items.length, ignored: wh.ignored } : null,\n  dropped: res ? (res.dropped || []) : [],\n  counts: sc ? sc.counts : null,\n  tickets: sc ? sc.results.map((r) => ({ ticketId: r.ticketId, scored: r.scored, skipReason: r.skipReason || null, score: r.frustration_score ?? null, tier: r.severity_tier || null, delta: r.sentiment_delta ?? null, regression: r.is_regression || false, triggers: r.matched_triggers || [], negated: r.negated_triggers || [], ignoredMessages: r.ignoredMessages.map((m) => m.reason), shouldEscalate: r.should_escalate })) : [],\n  escalated: g ? g.escalations.map((e) => e.ticketId) : [],\n  suppressed: g ? g.suppressed : [],\n  slack: sl ? sl.results : [],\n  hubspot: { updatesPrepared: fl ? fl.updates.length : 0, batches: hu.length, status: status(hu), updated: hu.reduce((n, x) => n + (Array.isArray(x.results) ? x.results.length : 0), 0) },\n  runSummaryWebhook: status(sum),\n} }];\n"
+      },
+      "id": "38858bb7-df4d-5bc8-9207-014d5cc8fd97",
+      "name": "Execution Summary & Audit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7060,
+        200
+      ],
+      "notes": "Final record on every path.",
+      "notesInFlow": false
+    }
+  ],
+  "connections": {
+    "Ticket Reply Webhook": {
+      "main": [
+        [
+          {
+            "node": "Config & Safety Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Polling Fallback Schedule": {
+      "main": [
+        [
+          {
+            "node": "Config & Safety Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Test Trigger": {
+      "main": [
+        [
+          {
+            "node": "Config & Safety Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config & Safety Gate": {
+      "main": [
+        [
+          {
+            "node": "From Webhook?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "From Webhook?": {
+      "main": [
+        [
+          {
+            "node": "Parse & Verify Webhook Events",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sandbox Mode?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Verify Webhook Events": {
+      "main": [
+        [
+          {
+            "node": "Sandbox Mode?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sandbox Mode?": {
+      "main": [
+        [
+          {
+            "node": "Mock Ticket Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Webhook Items?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock Ticket Context": {
+      "main": [
+        [
+          {
+            "node": "Sentiment Regression & Frustration Scoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Items?": {
+      "main": [
+        [
+          {
+            "node": "Build Work Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HubSpot: Search Recent Tickets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: Search Recent Tickets": {
+      "main": [
+        [
+          {
+            "node": "Build Work Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Work Items": {
+      "main": [
+        [
+          {
+            "node": "Has Work Items?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Work Items?": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: Find Thread",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execution Summary & Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: Find Thread": {
+      "main": [
+        [
+          {
+            "node": "Resolve Thread & Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Thread & Ticket": {
+      "main": [
+        [
+          {
+            "node": "Has Threads?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Threads?": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: Get Thread Messages",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execution Summary & Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: Get Thread Messages": {
+      "main": [
+        [
+          {
+            "node": "Collect Messages & Build Reads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Messages & Build Reads": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: Batch Read Tickets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: Batch Read Tickets": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: Ticket → Company Associations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: Ticket → Company Associations": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: Ticket → Contact Associations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: Ticket → Contact Associations": {
+      "main": [
+        [
+          {
+            "node": "Build Company & Contact Reads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Company & Contact Reads": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: Batch Read Companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: Batch Read Companies": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: Batch Read Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: Batch Read Contacts": {
+      "main": [
+        [
+          {
+            "node": "Assemble Ticket Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Ticket Context": {
+      "main": [
+        [
+          {
+            "node": "Sentiment Regression & Frustration Scoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sentiment Regression & Frustration Scoring": {
+      "main": [
+        [
+          {
+            "node": "Cooldown & Escalation Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cooldown & Escalation Gate": {
+      "main": [
+        [
+          {
+            "node": "Build Slack Escalation Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Slack Escalation Alerts": {
+      "main": [
+        [
+          {
+            "node": "Slack Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Gate": {
+      "main": [
+        [
+          {
+            "node": "Emit Slack Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build HubSpot Ticket Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Emit Slack Alerts": {
+      "main": [
+        [
+          {
+            "node": "Slack: Post Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: Post Escalation": {
+      "main": [
+        [
+          {
+            "node": "Collect Slack Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Slack Results": {
+      "main": [
+        [
+          {
+            "node": "Build HubSpot Ticket Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build HubSpot Ticket Updates": {
+      "main": [
+        [
+          {
+            "node": "Write Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Gate": {
+      "main": [
+        [
+          {
+            "node": "Emit Flag Batches",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Run Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Emit Flag Batches": {
+      "main": [
+        [
+          {
+            "node": "HubSpot: Flag Tickets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot: Flag Tickets": {
+      "main": [
+        [
+          {
+            "node": "Build Run Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Run Summary": {
+      "main": [
+        [
+          {
+            "node": "Summary Webhook?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summary Webhook?": {
+      "main": [
+        [
+          {
+            "node": "Webhook: Post Run Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execution Summary & Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Post Run Summary": {
+      "main": [
+        [
+          {
+            "node": "Execution Summary & Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {
+    "Ticket Reply Webhook": [
+      {
+        "json": {
+          "headers": {
+            "content-type": "application/json",
+            "x-hubspot-signature-v3": "c3ludGhldGljLXNpZ25hdHVyZQ==",
+            "x-hubspot-request-timestamp": "1763297000000"
+          },
+          "params": {},
+          "query": {},
+          "body": [
+            {
+              "eventId": 91001,
+              "subscriptionId": 3001,
+              "portalId": 99000001,
+              "appId": 5500001,
+              "occurredAt": 1763297000000,
+              "subscriptionType": "conversation.newMessage",
+              "attemptNumber": 0,
+              "objectId": 4001201,
+              "messageId": "m1201c",
+              "messageType": "MESSAGE",
+              "changeFlag": "NEW_MESSAGE"
+            },
+            {
+              "eventId": 91002,
+              "subscriptionId": 3002,
+              "portalId": 99000001,
+              "appId": 5500001,
+              "occurredAt": 1763297001000,
+              "subscriptionType": "ticket.propertyChange",
+              "attemptNumber": 0,
+              "objectId": 8001202,
+              "propertyName": "hs_last_message_received_at",
+              "propertyValue": "1763297001000",
+              "changeSource": "CONVERSATIONS",
+              "sourceId": "conversations"
+            },
+            {
+              "eventId": 91003,
+              "subscriptionId": 3002,
+              "portalId": 99000001,
+              "appId": 5500001,
+              "occurredAt": 1763297002000,
+              "subscriptionType": "ticket.propertyChange",
+              "attemptNumber": 0,
+              "objectId": 8001203,
+              "propertyName": "frustration_score",
+              "propertyValue": "0",
+              "changeSource": "INTEGRATION",
+              "sourceId": "5500001"
+            }
+          ],
+          "webhookUrl": "https://n8n.example/webhook/hubspot/ticket-replies",
+          "executionMode": "production"
+        }
+      }
+    ],
+    "HubSpot: Search Recent Tickets": [
+      {
+        "json": {
+          "total": 2,
+          "results": [
+            {
+              "id": "8001201",
+              "properties": {
+                "hs_object_id": "8001201"
+              }
+            },
+            {
+              "id": "8001202",
+              "properties": {
+                "hs_object_id": "8001202"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "HubSpot: Find Thread": [
+      {
+        "json": {
+          "id": "4001201",
+          "threadAssociations": {
+            "associatedTicketId": "8001201"
+          },
+          "status": "OPEN",
+          "latestMessageTimestamp": "2026-11-16T10:05:00.000Z"
+        }
+      },
+      {
+        "json": {
+          "results": [
+            {
+              "id": "4001202",
+              "threadAssociations": {
+                "associatedTicketId": "8001202"
+              },
+              "status": "OPEN",
+              "latestMessageTimestamp": "2026-11-16T10:10:00.000Z"
+            }
+          ]
+        }
+      }
+    ],
+    "HubSpot: Get Thread Messages": [
+      {
+        "json": {
+          "results": [
+            {
+              "id": "m1201a",
+              "type": "MESSAGE",
+              "createdAt": "2026-11-16T08:00:00.000Z",
+              "direction": "INCOMING",
+              "channelId": "1002",
+              "text": "Hi, our nightly data sync failed again. Can you take a look?",
+              "senders": [
+                {
+                  "actorId": "V-alexrivera",
+                  "name": "Alex Rivera",
+                  "deliveryIdentifier": {
+                    "type": "HS_EMAIL_ADDRESS",
+                    "value": "alex.rivera@example.com"
+                  }
+                }
+              ],
+              "archived": false
+            },
+            {
+              "id": "m1201b",
+              "type": "MESSAGE",
+              "createdAt": "2026-11-16T08:30:00.000Z",
+              "direction": "OUTGOING",
+              "channelId": "1002",
+              "text": "Thanks Alex, we are investigating and will update you shortly.",
+              "senders": [
+                {
+                  "actorId": "A-agentone",
+                  "name": "Support Agent",
+                  "deliveryIdentifier": {
+                    "type": "HS_EMAIL_ADDRESS",
+                    "value": "agent.one@company.example"
+                  }
+                }
+              ],
+              "archived": false
+            },
+            {
+              "id": "m1201c",
+              "type": "MESSAGE",
+              "createdAt": "2026-11-16T10:05:00.000Z",
+              "direction": "INCOMING",
+              "channelId": "1002",
+              "text": "This is UNACCEPTABLE. This is the third time the sync is broken again this month. If this isn't fixed today we will cancel, and our lawyer is already reviewing the contract!!! Call me on +1-202-555-0148.",
+              "senders": [
+                {
+                  "actorId": "V-alexrivera",
+                  "name": "Alex Rivera",
+                  "deliveryIdentifier": {
+                    "type": "HS_EMAIL_ADDRESS",
+                    "value": "alex.rivera@example.com"
+                  }
+                }
+              ],
+              "archived": false
+            }
+          ]
+        }
+      },
+      {
+        "json": {
+          "results": [
+            {
+              "id": "m1202a",
+              "type": "MESSAGE",
+              "createdAt": "2026-11-16T06:00:00.000Z",
+              "direction": "INCOMING",
+              "channelId": "1002",
+              "text": "The CSV export button does nothing when I click it.",
+              "senders": [
+                {
+                  "actorId": "V-jordantaylor",
+                  "name": "Jordan Taylor",
+                  "deliveryIdentifier": {
+                    "type": "HS_EMAIL_ADDRESS",
+                    "value": "jordan.taylor@example.com"
+                  }
+                }
+              ],
+              "archived": false
+            },
+            {
+              "id": "m1202b",
+              "type": "MESSAGE",
+              "createdAt": "2026-11-16T06:20:00.000Z",
+              "direction": "OUTGOING",
+              "channelId": "1002",
+              "text": "Thanks Jordan, logging this with engineering.",
+              "senders": [
+                {
+                  "actorId": "A-agentone",
+                  "name": "Support Agent",
+                  "deliveryIdentifier": {
+                    "type": "HS_EMAIL_ADDRESS",
+                    "value": "agent.one@company.example"
+                  }
+                }
+              ],
+              "archived": false
+            },
+            {
+              "id": "m1202c",
+              "type": "MESSAGE",
+              "createdAt": "2026-11-16T08:00:00.000Z",
+              "direction": "INCOMING",
+              "channelId": "1002",
+              "text": "Any update on this?",
+              "senders": [
+                {
+                  "actorId": "V-jordantaylor",
+                  "name": "Jordan Taylor",
+                  "deliveryIdentifier": {
+                    "type": "HS_EMAIL_ADDRESS",
+                    "value": "jordan.taylor@example.com"
+                  }
+                }
+              ],
+              "archived": false
+            },
+            {
+              "id": "m1202d",
+              "type": "MESSAGE",
+              "createdAt": "2026-11-16T09:00:00.000Z",
+              "direction": "INCOMING",
+              "channelId": "1002",
+              "text": "Still waiting on this, the team needs the export for month-end.",
+              "senders": [
+                {
+                  "actorId": "V-jordantaylor",
+                  "name": "Jordan Taylor",
+                  "deliveryIdentifier": {
+                    "type": "HS_EMAIL_ADDRESS",
+                    "value": "jordan.taylor@example.com"
+                  }
+                }
+              ],
+              "archived": false
+            },
+            {
+              "id": "m1202e",
+              "type": "MESSAGE",
+              "createdAt": "2026-11-16T10:10:00.000Z",
+              "direction": "INCOMING",
+              "channelId": "1002",
+              "text": "Still waiting. Nobody has responded in two days and I keep asking. Please escalate this to a manager.",
+              "senders": [
+                {
+                  "actorId": "V-jordantaylor",
+                  "name": "Jordan Taylor",
+                  "deliveryIdentifier": {
+                    "type": "HS_EMAIL_ADDRESS",
+                    "value": "jordan.taylor@example.com"
+                  }
+                }
+              ],
+              "archived": false
+            }
+          ]
+        }
+      }
+    ],
+    "HubSpot: Batch Read Tickets": [
+      {
+        "json": {
+          "status": "COMPLETE",
+          "results": [
+            {
+              "id": "8001201",
+              "properties": {
+                "subject": "Data sync failing",
+                "hs_ticket_priority": "MEDIUM",
+                "hs_pipeline": "0",
+                "hs_pipeline_stage": "2",
+                "frustration_score": null,
+                "frustration_last_alert_at": null,
+                "frustration_last_alert_tier": null
+              }
+            },
+            {
+              "id": "8001202",
+              "properties": {
+                "subject": "Export button not working",
+                "hs_ticket_priority": "LOW",
+                "hs_pipeline": "0",
+                "hs_pipeline_stage": "2",
+                "frustration_score": null,
+                "frustration_last_alert_at": null,
+                "frustration_last_alert_tier": null
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "HubSpot: Ticket → Company Associations": [
+      {
+        "json": {
+          "status": "COMPLETE",
+          "results": [
+            {
+              "from": {
+                "id": "8001201"
+              },
+              "to": [
+                {
+                  "toObjectId": 7001201,
+                  "associationTypes": [
+                    {
+                      "category": "HUBSPOT_DEFINED",
+                      "typeId": 26,
+                      "label": "Primary"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "from": {
+                "id": "8001202"
+              },
+              "to": [
+                {
+                  "toObjectId": 7001202,
+                  "associationTypes": [
+                    {
+                      "category": "HUBSPOT_DEFINED",
+                      "typeId": 26,
+                      "label": "Primary"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "HubSpot: Ticket → Contact Associations": [
+      {
+        "json": {
+          "status": "COMPLETE",
+          "results": [
+            {
+              "from": {
+                "id": "8001201"
+              },
+              "to": [
+                {
+                  "toObjectId": 9001201,
+                  "associationTypes": [
+                    {
+                      "category": "HUBSPOT_DEFINED",
+                      "typeId": 16,
+                      "label": null
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "from": {
+                "id": "8001202"
+              },
+              "to": [
+                {
+                  "toObjectId": 9001202,
+                  "associationTypes": [
+                    {
+                      "category": "HUBSPOT_DEFINED",
+                      "typeId": 16,
+                      "label": null
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "HubSpot: Batch Read Companies": [
+      {
+        "json": {
+          "status": "COMPLETE",
+          "results": [
+            {
+              "id": "7001201",
+              "properties": {
+                "name": "Acme Cloud Solutions",
+                "customer_tier": "Enterprise"
+              }
+            },
+            {
+              "id": "7001202",
+              "properties": {
+                "name": "Northstar Logistics",
+                "customer_tier": "Growth"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "HubSpot: Batch Read Contacts": [
+      {
+        "json": {
+          "status": "COMPLETE",
+          "results": [
+            {
+              "id": "9001201",
+              "properties": {
+                "firstname": "Alex",
+                "lastname": "Rivera",
+                "email": "alex.rivera@example.com",
+                "jobtitle": null
+              }
+            },
+            {
+              "id": "9001202",
+              "properties": {
+                "firstname": "Jordan",
+                "lastname": "Taylor",
+                "email": "jordan.taylor@example.com",
+                "jobtitle": null
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "Slack: Post Escalation": [
+      {
+        "json": {
+          "data": "ok"
+        }
+      },
+      {
+        "json": {
+          "data": "ok"
+        }
+      }
+    ],
+    "HubSpot: Flag Tickets": [
+      {
+        "json": {
+          "status": "COMPLETE",
+          "results": [
+            {
+              "id": "8001201",
+              "properties": {}
+            },
+            {
+              "id": "8001202",
+              "properties": {}
+            }
+          ]
+        }
+      }
+    ],
+    "Webhook: Post Run Summary": [
+      {
+        "json": {
+          "received": true
+        }
+      }
+    ]
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": false,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": 900
+  },
+  "versionId": "36d96b37-0159-5bde-a3c8-8845260ef719",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}
